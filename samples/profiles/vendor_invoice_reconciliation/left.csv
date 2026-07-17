@@ -1,0 +1,4 @@
+document_id,party_name,amount,event_date,region
+D-001,Alpha Supply,1000.00,2026-01-10,north
+D-002,Beta Services,2000.00,2026-01-15,south
+D-003,Gamma Trade,3000.00,2026-01-20,east

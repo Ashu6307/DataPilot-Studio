@@ -141,7 +141,7 @@ export interface ValidationRule {
 }
 
 export interface Workflow {
-  schema_version: "1.0" | "1.1" | "1.2";
+  schema_version: "1.0" | "1.1" | "1.2" | "1.3";
   compatibility_version: 1;
   id: string;
   workflow_version: number;
@@ -161,11 +161,142 @@ export interface Workflow {
   calculations: CalculatedField[];
   composition_plan_id?: string | null;
   composition_plan_version?: number | null;
+  reconciliation_workflow_id?: string | null;
+  reconciliation_workflow_version?: number | null;
   validation_rules: ValidationRule[];
   export: { filename_prefix: string; include_summary: boolean; include_rejected_rows: boolean; include_source_metadata: boolean };
   created_at: string;
   updated_at: string;
   change_note: string;
+}
+
+export type MatchMethod = "exact" | "normalised_exact" | "numeric_tolerance" | "date_tolerance" |
+  "combined_exact_tolerance" | "fuzzy_text" | "weighted_multi_field";
+
+export interface MatchStage {
+  schema_version: "2b.1";
+  id: string;
+  name: string;
+  priority: number;
+  left_key_fields: string[];
+  right_key_fields: string[];
+  normalisation_pipelines?: Array<Record<string, unknown> | null>;
+  method: MatchMethod;
+  threshold?: string;
+  numeric_tolerances?: Record<string, { mode: string; tolerance: string }>;
+  date_tolerances?: Record<string, { mode: string; days: number }>;
+  candidate_constraints?: Array<{ id: string; method: string; left_field: string; right_field: string; parameters?: Record<string, unknown> }>;
+  fuzzy_fields?: Array<{ left_field: string; right_field: string; method: string; threshold: string }>;
+  weighted_fields?: Array<{ id: string; left_field: string; right_field: string; comparison: string; weight: string; fuzzy_method?: string }>;
+  tie_breaking_rule?: string;
+  one_to_one?: boolean;
+  duplicate_handling?: string;
+  output_classification?: string;
+  continue_policy?: string;
+}
+
+export interface ReconciliationWorkflow {
+  schema_version: "2b.1";
+  id: string;
+  version: number;
+  project_id: string;
+  display_name: string;
+  left_dataset_id: string;
+  right_dataset_id: string;
+  left_discovery?: Record<string, unknown>;
+  right_discovery?: Record<string, unknown>;
+  comparison?: Record<string, unknown>;
+  stages: MatchStage[];
+  comparison_fields?: Array<Record<string, unknown>>;
+  budgets?: Record<string, number | string>;
+  evidence_fields?: string[];
+  export?: Record<string, unknown>;
+}
+
+export interface MatchResult {
+  left: { dataset_id: string; record_id: string; source_row: number | null; business_key: unknown[] };
+  right: { dataset_id: string; record_id: string; source_row: number | null; business_key: unknown[] };
+  stage_id: string;
+  match_type: MatchMethod;
+  score: string;
+  matched_fields: string[];
+  differences: Array<Record<string, unknown>>;
+  reason_code: string;
+  confidence: "high" | "medium" | "low";
+  review_required: boolean;
+  field_scores: Array<Record<string, unknown>>;
+}
+
+export interface ReviewItem {
+  id: string;
+  reconciliation_run_id: string;
+  left_record: Record<string, unknown>;
+  right_candidates: Array<Record<string, unknown>>;
+  candidates: Array<Record<string, unknown>>;
+  match_stage_id: string;
+  field_differences: Array<Record<string, unknown>>;
+  review_reason: string;
+  suggested_decision: string | null;
+  status: string;
+  reviewer: string | null;
+  decision_timestamp: string | null;
+  comment: string | null;
+  audit_event_ids: string[];
+}
+
+export interface ReconciliationResult {
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: RunRecord["status"];
+  matches: MatchResult[];
+  review_items: ReviewItem[];
+  left_unmatched: Array<Record<string, unknown>>;
+  right_unmatched: Array<Record<string, unknown>>;
+  field_differences: Array<Record<string, unknown>>;
+  stage_estimates: Array<{ stage_id: string; estimated_pairs: number; maximum_pairs: number; estimated_memory_bytes: number; blocked: boolean; warnings: string[] }>;
+  summary: ReconciliationSummary;
+  audit: string[];
+  warnings: string[];
+  comparison_result?: { summary: Record<string, number>; records: Array<Record<string, unknown>>; field_differences: Array<Record<string, unknown>> } | null;
+  integrity_result?: { summary: Record<string, number>; findings: Array<Record<string, unknown>>; blocked: boolean } | null;
+}
+
+export interface ReconciliationSummary {
+  total_left_rows: number;
+  total_right_rows: number;
+  matched: number;
+  exact_matches: number;
+  normalised_matches: number;
+  tolerance_matches: number;
+  fuzzy_matches: number;
+  weighted_matches: number;
+  review_pending: number;
+  left_unmatched: number;
+  right_unmatched: number;
+  duplicate_candidates: number;
+}
+
+export interface ReconciliationRunRecord {
+  run_id: string;
+  project_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: RunRecord["status"];
+  summary: ReconciliationSummary;
+  audit: string[];
+  artifacts: string[];
+  created_at: string;
+}
+
+export interface ReconciliationManifest {
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: RunRecord["status"];
+  entries: Array<{ relative_path: string; media_type: string; size_bytes: number; sha256: string; row_count: number; classification: string }>;
+  output_counts: Record<string, number>;
+  applied_rule_ids: string[];
 }
 
 export interface Finding {

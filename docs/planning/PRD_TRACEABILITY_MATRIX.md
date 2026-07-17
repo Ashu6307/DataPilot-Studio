@@ -55,23 +55,23 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Deferred
 | 14 | FR-14-01..07 | Condition builder, typed calculations, reusable/versioned rules, evaluator/tests | Rule engine | M1/M2 | Partial | `test_validators.py`, `test_expressions.py`, Playwright | Closed typed evaluator and calculation builder implemented; full visual condition authoring remains M2 |
 | 15 | FR-15-01 | Required/unique/range/pattern/allowed checks | Validation | M1 | Implemented | `test_validators.py` | All included |
 | 15 | FR-15-02 | Cross-field conditional validation | Validation | M2 | Deferred | future rule tests | Not in slice |
-| 15 | FR-15-03 | Referential integrity | Validation | M2 | Deferred | future reference tests | Not in slice |
-| 15 | FR-15-04 | Duplicate/near-duplicate detection | Validation | M1/M2 | Partial | `test_validators.py` | Exact unique now; near duplicate deferred |
+| 15 | FR-15-03 | Referential integrity | Validation | M2B | Implemented | `test_referential_integrity_supports_composite_keys` | Generic single/composite parent-child keys, policies and audit |
+| 15 | FR-15-04 | Duplicate/near-duplicate detection | Validation | M1/M2B | Implemented | `test_fuzzy_tie_routes_to_manual_review`, `test_fuzzy_candidates_require_blocking_and_detect_budget_breach` | Exact duplicates plus governed blocked fuzzy candidates |
 | 15 | FR-15-05 | Schema/type validation | Validation | M1 | Implemented | `test_validators.py` | Ambiguity stays visible |
 | 15 | FR-15-06 | Transparent outlier/anomaly flags | Quality | M2 | Deferred | future anomaly tests | Not in slice |
 | 15 | FR-15-07 | Dimension quality score | Quality | M2 | Deferred | future score tests | Counts only now |
 | 15 | FR-15-08 | Info/warning/error severities | Validation | M1 | Implemented | `test_validators.py` | Adds blocking per brief |
-| 16 | FR-16-01..08 | Staged exact/tolerance/fuzzy reconciliation and review outputs | Reconciliation | M2 | Deferred | future reconciliation suite | Explicitly outside slice |
-| 17 | FR-17-01..07 | Key-based workbook/data comparison and review outputs | Comparison | M2 | Deferred | future comparison suite | Explicitly outside slice |
+| 16 | FR-16-01..08 | Staged exact/tolerance/fuzzy reconciliation and review outputs | Reconciliation | M2B | Implemented | `test_reconciliation_engine.py`, `test_reconciliation_vertical_slice.py`, `test_reconciliation_persistence.py` | Ordered waterfall, budgets, transparent scores, review events and evidence outputs |
+| 17 | FR-17-01..07 | Key-based workbook/data comparison and review outputs | Comparison | M2B | Implemented | `test_key_comparison_is_order_independent_and_reports_all_categories`, `test_structure_comparison_reuses_schema_drift_and_reports_key_uniqueness` | Dynamic keys, field differences, structure drift reuse and summaries |
 | 18 | FR-18-01..08 | Typed visual workflows, modes, progress/cancel/checkpoints/versioning | Workflow platform | M1B/M3 | Partial | `test_background_jobs.py`, Playwright | Linear typed flow, progress, cancel, checkpoints, and versioning now; visual DAG remains M3 |
 | 19 | FR-19-01..07 | Triggers/schedules/stability/retry/dependencies/queues/recovery | Orchestration | M1B/M3 | Partial | `test_background_jobs.py` | Persistent local queue, safe retry, and restart recovery now; triggers/schedules remain M3 |
 | 20 | FR-20-01..07 | Workbook productivity, formulas, health and formatting | Excel tools | M2+ | Deferred | future workbook corpus | Export formatting only |
 | 21 | FR-21-01 | Excel detail/summary/error/audit export | Export | M1 | Implemented | `test_vertical_slice.py` | Required pack |
 | 21 | FR-21-02 | Dynamic order/formats/widths/filters/freeze/conditional | Export | M1 | Implemented | `test_vertical_slice.py` | Safe limits and error highlighting |
-| 21 | FR-21-03 | Branded template packs | Report | M2 | Deferred | future golden tests | Base theme only |
+| 21 | FR-21-03 | Branded template packs | Report | M2 | Partial | `test_evidence_zip_is_deterministic_and_formula_safe` | Professional reconciliation evidence pack; editable branding remains later |
 | 21 | FR-21-04 | Pivot summaries and KPI cards | Report | M2 | Deferred | future report tests | Counts summary only |
 | 21 | FR-21-05 | Interactive dashboards | Reports/UI | M4+ | Deferred | future dashboard E2E | Not in slice |
-| 21 | FR-21-06 | CSV/Parquet/JSON/API outputs | Export | M2A | Partial | `test_split_and_batch_export.py` | CSV/JSON evidence and API manifests implemented; Parquet deferred |
+| 21 | FR-21-06 | CSV/Parquet/JSON/API outputs | Export | M2A/M2B | Partial | `test_split_and_batch_export.py`, `test_reconciliation_vertical_slice.py` | CSV/JSON/ZIP evidence and API manifests implemented; Parquet deferred |
 | 21 | FR-21-07 | Publication checks | Runtime/export | M1 | Implemented | `test_vertical_slice.py` | Reopen and reconcile |
 | 22 | FR-22-01..07 | Governed AI mapping/workflow/explanations/summaries | AI | M6 | Deferred | future AI guardrail tests | Remote AI prohibited now |
 | 23 | FR-23-01..07 | Safe file naming/routing/hash/package/retention/watcher | File automation | M2A/M3 | Partial | `test_split_and_batch_export.py` | Safe names, routing, hash and package implemented; retention/watcher deferred |
@@ -92,8 +92,8 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Deferred
 | 37 | US-011..024 | P1 profiles/drift/advanced ops/reports/visual workflow/support | Core/advanced | M1/M2/M3 | Partial | per-module future suites | Save profile now; remainder staged |
 | 37 | US-025..035 | P2 scheduler/connectors/dashboard/team/license/update/AI | Later platform | M3-M6 | Deferred | future phase tests | Explicit deferral |
 | 37 | US-036..040 | P3 plugins/marketplace/cloud/SSO/audit ledger | Ecosystem | M6 | Deferred | future enterprise tests | Explicit deferral |
-| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | `test_vertical_slice.py`, `test_composition_vertical_slice.py`, Playwright | M2A adds dynamic composition safety/audit; deferred modules retain criteria |
-| 39-42 | PRD-KICKOFF-01 | Reference workflows, sequence, fixtures, API, review gates | Delivery | M0/M1B | Implemented | all current suites | Five anonymised profiles, dynamic fixtures, API, UI, and release gates covered |
+| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | `test_vertical_slice.py`, `test_composition_vertical_slice.py`, `test_reconciliation_vertical_slice.py`, Playwright | M2B adds dynamic reconciliation budgets, review audit and immutable inputs; later commercial modules retain criteria |
+| 39-42 | PRD-KICKOFF-01 | Reference workflows, sequence, fixtures, API, review gates | Delivery | M0/M2B | Implemented | all current suites | Five ingestion and five reconciliation profiles, dynamic fixtures, API, UI, and release gates covered |
 
 ## Review rule
 

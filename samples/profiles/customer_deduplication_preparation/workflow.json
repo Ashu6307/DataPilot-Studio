@@ -1,0 +1,20 @@
+{
+  "schema_version": "2b.1", "id": "22000000-0000-4000-8000-000000000005", "version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000005", "display_name": "Customer Master Deduplication Preparation",
+  "left_dataset_id": "21000000-0000-4000-8000-000000000009", "right_dataset_id": "21000000-0000-4000-8000-000000000010",
+  "evidence_fields": ["name", "region", "phone", "email"],
+  "stages": [
+    {"schema_version": "2b.1", "id": "fuzzy_name", "name": "Blocked name candidates", "priority": 1,
+     "left_key_fields": ["name"], "right_key_fields": ["name"], "method": "fuzzy_text", "threshold": "0.75",
+     "candidate_constraints": [{"id": "same_region", "method": "exact", "left_field": "region", "right_field": "region"}],
+     "fuzzy_fields": [{"left_field": "name", "right_field": "name", "method": "token_set_similarity", "threshold": "0.75"}]},
+    {"schema_version": "2b.1", "id": "weighted_evidence", "name": "Weighted contact evidence", "priority": 2,
+     "left_key_fields": ["name"], "right_key_fields": ["name"], "method": "weighted_multi_field", "threshold": "0.7",
+     "candidate_constraints": [{"id": "same_region_weighted", "method": "exact", "left_field": "region", "right_field": "region"}],
+     "weighted_fields": [
+       {"id": "name_score", "left_field": "name", "right_field": "name", "comparison": "fuzzy", "fuzzy_method": "token_sort_similarity", "weight": "0.4"},
+       {"id": "phone_score", "left_field": "phone", "right_field": "phone", "comparison": "exact", "weight": "0.3"},
+       {"id": "email_score", "left_field": "email", "right_field": "email", "comparison": "exact", "weight": "0.3"}
+     ]}
+  ]
+}

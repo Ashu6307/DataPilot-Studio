@@ -1,0 +1,5 @@
+parent_a,parent_b,state
+01,A,active
+02,B,active
+02,B,inactive
+03,C,active

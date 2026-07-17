@@ -25,6 +25,10 @@ from packages.contracts import (
     PreviewResult,
     Project,
     ProjectCreate,
+    ReconciliationJobSubmission,
+    ReconciliationPreviewRequest,
+    ReconciliationResult,
+    ReconciliationWorkflow,
     RunRecord,
     RunRequest,
     SourceHandle,
@@ -42,6 +46,7 @@ from packages.data_engine.background import workflow_hash
 from packages.data_engine.composition_background import composition_hash
 from packages.data_engine.composition_runtime import CompositionRuntime
 from packages.data_engine.multi_source import build_batch_catalog, scan_folder_paths
+from packages.data_engine.reconciliation_runtime import ReconciliationRuntime
 from packages.workflow_schema import assert_secret_free
 
 from .repositories import MetadataRepository
@@ -53,6 +58,7 @@ class DataPilotService:
         self.workspace = workspace
         self.runtime = EngineRuntime(workspace)
         self.composition_runtime = CompositionRuntime(workspace)
+        self.reconciliation_runtime = ReconciliationRuntime(workspace)
 
     def create_project(self, request: ProjectCreate) -> Project:
         return self.repository.create_project(Project(**request.model_dump()))
@@ -253,6 +259,60 @@ class DataPilotService:
                 workflow_hash=composition_hash(submission),
                 source_fingerprint=combined_fingerprint,
                 completed_stage="composition_completed",
+                rows_processed=result.record.rows_read,
+                artifact_path=result.record.artifacts[-1] if result.record.artifacts else None,
+                resumable=False,
+            )
+        )
+        return result.record
+
+    def save_reconciliation_workflow(self, workflow: ReconciliationWorkflow) -> ReconciliationWorkflow:
+        assert_secret_free(workflow.model_dump(mode="json"))
+        return self.repository.save_reconciliation_workflow(workflow)
+
+    def preview_reconciliation(self, request: ReconciliationPreviewRequest) -> ReconciliationResult:
+        assert_secret_free(request.workflow.model_dump(mode="json"))
+        _, left = self._source(request.workflow.left_dataset_id)
+        _, right = self._source(request.workflow.right_dataset_id)
+        return self.reconciliation_runtime.preview(request.workflow, left, right, request.row_limit)
+
+    def run_reconciliation_background(
+        self,
+        submission: ReconciliationJobSubmission,
+        control: JobControl,
+    ) -> RunRecord:
+        workflow = submission.run.workflow
+        assert_secret_free(workflow.model_dump(mode="json"))
+        left = self._source(workflow.left_dataset_id)
+        right = self._source(workflow.right_dataset_id)
+        combined_fingerprint = hashlib.sha256(
+            "".join(sorted([left[0].sha256, right[0].sha256])).encode("utf-8")
+        ).hexdigest()
+        workflow_digest = hashlib.sha256(workflow.model_dump_json().encode("utf-8")).hexdigest()
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=workflow.id,
+                workflow_version=workflow.version,
+                workflow_hash=workflow_digest,
+                source_fingerprint=combined_fingerprint,
+                completed_stage="reconciliation_inputs_validated",
+                resumable=True,
+            )
+        )
+        result = self.reconciliation_runtime.execute(workflow, left, right, control)
+        self.repository.save_run(result.record)
+        self.repository.save_reconciliation_run(result.reconciliation_record)
+        self.repository.save_review_items(result.result.review_items)
+        self.repository.save_reconciliation_manifest(result.manifest)
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=workflow.id,
+                workflow_version=workflow.version,
+                workflow_hash=workflow_digest,
+                source_fingerprint=combined_fingerprint,
+                completed_stage="reconciliation_completed",
                 rows_processed=result.record.rows_read,
                 artifact_path=result.record.artifacts[-1] if result.record.artifacts else None,
                 resumable=False,

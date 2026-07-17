@@ -86,6 +86,47 @@ CREATE INDEX IF NOT EXISTS idx_alignment_decisions_plan ON alignment_decisions(p
 CREATE INDEX IF NOT EXISTS idx_batch_manifests_project ON batch_manifests(project_id, created_at);
 """
 
+M2B_RECONCILIATION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS reconciliation_workflows (
+    id TEXT NOT NULL, version INTEGER NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id),
+    display_name TEXT NOT NULL, configuration_json TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (id, version)
+);
+CREATE TABLE IF NOT EXISTS reconciliation_runs (
+    run_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+    workflow_id TEXT NOT NULL, workflow_version INTEGER NOT NULL, status TEXT NOT NULL,
+    summary_json TEXT NOT NULL, audit_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS review_items (
+    id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES reconciliation_runs(run_id),
+    status TEXT NOT NULL, item_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS review_decision_events (
+    id TEXT PRIMARY KEY, review_item_id TEXT NOT NULL REFERENCES review_items(id),
+    supersedes_event_id TEXT REFERENCES review_decision_events(id), event_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS decision_memory (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), kind TEXT NOT NULL,
+    active INTEGER NOT NULL, memory_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS decision_memory_events (
+    id TEXT PRIMARY KEY, memory_id TEXT NOT NULL REFERENCES decision_memory(id),
+    action TEXT NOT NULL, event_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reconciliation_export_manifests (
+    run_id TEXT PRIMARY KEY REFERENCES reconciliation_runs(run_id), manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_workflows_project
+    ON reconciliation_workflows(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_runs_project
+    ON reconciliation_runs(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_review_items_run_status ON review_items(run_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_review_events_item ON review_decision_events(review_item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_decision_memory_project ON decision_memory(project_id, active, kind);
+"""
+
 VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL
@@ -108,6 +149,7 @@ MIGRATIONS = (
     Migration(1, "milestone_1a_metadata", M1A_SCHEMA),
     Migration(2, "milestone_1b_jobs_checkpoints_mapping_history", M1B_JOB_SCHEMA),
     Migration(3, "milestone_2a_composition_metadata", M2A_COMPOSITION_SCHEMA),
+    Migration(4, "milestone_2b_reconciliation_metadata", M2B_RECONCILIATION_SCHEMA),
 )
 
 

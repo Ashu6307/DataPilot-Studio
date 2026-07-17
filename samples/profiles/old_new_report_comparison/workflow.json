@@ -1,0 +1,24 @@
+{
+  "schema_version": "2b.1",
+  "id": "22000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000001",
+  "display_name": "Old vs New Monthly Report Comparison",
+  "left_dataset_id": "21000000-0000-4000-8000-000000000001",
+  "right_dataset_id": "21000000-0000-4000-8000-000000000002",
+  "comparison": {
+    "schema_version": "2b.1",
+    "id": "23000000-0000-4000-8000-000000000001",
+    "version": 1,
+    "project_id": "20000000-0000-4000-8000-000000000001",
+    "left_dataset_id": "21000000-0000-4000-8000-000000000001",
+    "right_dataset_id": "21000000-0000-4000-8000-000000000002",
+    "business_key_fields": ["record_key"],
+    "compare_fields": ["category", "amount"]
+  },
+  "comparison_fields": [{"field_id": "amount", "data_type": "decimal"}],
+  "stages": [{
+    "schema_version": "2b.1", "id": "exact_key", "name": "Exact business key", "priority": 1,
+    "left_key_fields": ["record_key"], "right_key_fields": ["record_key"], "method": "exact"
+  }]
+}

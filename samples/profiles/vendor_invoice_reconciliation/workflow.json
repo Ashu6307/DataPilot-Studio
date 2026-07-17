@@ -1,0 +1,21 @@
+{
+  "schema_version": "2b.1", "id": "22000000-0000-4000-8000-000000000002", "version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000002", "display_name": "Vendor Invoice Reconciliation",
+  "left_dataset_id": "21000000-0000-4000-8000-000000000003",
+  "right_dataset_id": "21000000-0000-4000-8000-000000000004",
+  "evidence_fields": ["document_id", "party_name", "amount", "event_date", "region"],
+  "stages": [
+    {"schema_version": "2b.1", "id": "exact_document", "name": "Exact document", "priority": 1,
+     "left_key_fields": ["document_id"], "right_key_fields": ["document_id"], "method": "exact"},
+    {"schema_version": "2b.1", "id": "amount_date", "name": "Amount and date tolerance", "priority": 2,
+     "left_key_fields": ["amount", "event_date"], "right_key_fields": ["amount", "event_date"],
+     "method": "combined_exact_tolerance", "threshold": "0.5",
+     "numeric_tolerances": {"amount": {"mode": "currency_amount", "tolerance": "5.00"}},
+     "date_tolerances": {"event_date": {"mode": "calendar_days", "days": 2}},
+     "candidate_constraints": [{"id": "same_region", "method": "exact", "left_field": "region", "right_field": "region"}]},
+    {"schema_version": "2b.1", "id": "fuzzy_party", "name": "Fuzzy party candidate", "priority": 3,
+     "left_key_fields": ["party_name"], "right_key_fields": ["party_name"], "method": "fuzzy_text", "threshold": "0.85",
+     "candidate_constraints": [{"id": "same_region_fuzzy", "method": "exact", "left_field": "region", "right_field": "region"}],
+     "fuzzy_fields": [{"left_field": "party_name", "right_field": "party_name", "method": "token_set_similarity", "threshold": "0.85"}]}
+  ]
+}

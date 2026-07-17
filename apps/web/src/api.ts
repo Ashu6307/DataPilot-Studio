@@ -1,6 +1,7 @@
 import type {
   BackgroundJob, BatchCatalog, BatchManifest, CompositionPlan, CompositionPreview, DiscoveryResult,
-  PreviewResult, Project, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery, Workflow,
+  PreviewResult, Project, ReconciliationManifest, ReconciliationResult, ReconciliationRunRecord,
+  ReconciliationWorkflow, ReviewItem, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery, Workflow,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -53,6 +54,36 @@ export const api = {
   getCompositionJob: (jobId: string) => request<BackgroundJob>(`/composition-jobs/${jobId}`),
   cancelCompositionJob: (jobId: string) => request<BackgroundJob>(`/composition-jobs/${jobId}/cancel`, { method: "POST" }),
   getBatchManifest: (runId: string) => request<BatchManifest>(`/batch-manifests/${runId}`),
+  saveReconciliationWorkflow: (workflow: ReconciliationWorkflow) =>
+    request<ReconciliationWorkflow>("/reconciliation-workflows", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(workflow),
+    }),
+  previewReconciliation: (workflow: ReconciliationWorkflow) =>
+    request<ReconciliationResult>("/reconciliations/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow, row_limit: 100 }),
+    }),
+  submitReconciliation: (workflow: ReconciliationWorkflow) =>
+    request<BackgroundJob>("/reconciliation-jobs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow, idempotency_key: crypto.randomUUID() }),
+    }),
+  getReconciliationJob: (jobId: string) => request<BackgroundJob>(`/reconciliation-jobs/${jobId}`),
+  cancelReconciliationJob: (jobId: string) =>
+    request<BackgroundJob>(`/reconciliation-jobs/${jobId}/cancel`, { method: "POST" }),
+  getReconciliationRun: (runId: string) => request<ReconciliationRunRecord>(`/reconciliation-runs/${runId}`),
+  getReconciliationReviews: (runId: string) => request<ReviewItem[]>(`/reconciliation-runs/${runId}/reviews`),
+  getReconciliationManifest: (runId: string) =>
+    request<ReconciliationManifest>(`/reconciliation-manifests/${runId}`),
+  decideReview: (reviewItemId: string, decision: string, selectedCandidateRecordId?: string) =>
+    request<Record<string, unknown>>(`/review-items/${reviewItemId}/decisions`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        review_item_id: reviewItemId, decision, selected_candidate_record_id: selectedCandidateRecordId ?? null,
+        reviewer: "local-user", comment: "Decision recorded in Reconciliation Studio",
+      }),
+    }),
+  getReviewDecisions: (reviewItemId: string) =>
+    request<Array<Record<string, unknown>>>(`/review-items/${reviewItemId}/decisions`),
   discover: (sourceId: string, sheetName: string | null = null, headerRow: number | null = null) =>
     request<DiscoveryResult>(`/sources/${sourceId}/discover`, {
       method: "POST",

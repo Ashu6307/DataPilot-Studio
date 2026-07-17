@@ -20,6 +20,7 @@ describe("DataPilot workspace", () => {
     render(<App />);
     expect(screen.getByRole("button", { name: /Source inspection/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Composition studio/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Reconciliation studio/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Schema drift review/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Calculated fields/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Run progress/i })).toBeDisabled();
@@ -44,5 +45,25 @@ describe("DataPilot workspace", () => {
     expect(screen.getByText("Cardinality warning")).toBeInTheDocument();
     expect(screen.getByText("Batch result manifest")).toBeInTheDocument();
     expect(screen.getByLabelText(/Choose multiple Excel or CSV files/i)).toHaveAttribute("multiple");
+  });
+
+  it("exposes the governed reconciliation workflow after project creation", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/projects") && init?.method === "POST") {
+        return new Response(JSON.stringify({
+          id: "10000000-0000-4000-8000-000000000002", name: "Reconciliation QA", locale: "en-IN",
+          privacy_mode: "local_only", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /Create local project/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /Reconciliation studio/i }));
+    expect(screen.getByRole("heading", { name: /Reconcile changing datasets/i })).toBeInTheDocument();
+    expect(screen.getByText("Normalisation builder")).toBeInTheDocument();
+    expect(screen.getByText("Candidate safety")).toBeInTheDocument();
+    expect(screen.getByText("Decision history")).toBeInTheDocument();
+    expect(screen.getAllByText(/Choose Excel or CSV/i)).toHaveLength(2);
   });
 });

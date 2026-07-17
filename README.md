@@ -1,6 +1,6 @@
 # DataPilot Studio
 
-DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 2A adds multi-file/folder catalogs, versioned canonical alignment, append/union, exact joins with cardinality gates, grouped aggregation, pivot/unpivot, dynamic split outputs, deterministic evidence packages, and a background-enabled Composition Studio.
+DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 2B adds arbitrary key-based dataset and structure comparison, composite referential integrity, audited key normalisation, staged exact/tolerance/fuzzy/weighted reconciliation, governed manual review, decision memory, and deterministic evidence packages through a background-enabled Reconciliation Studio.
 
 The source of truth is `docs/product/DataPilot_Studio_Commercial_PRD_v1.0.pdf`. Milestone scope and requirement status are recorded in `docs/planning/PRD_TRACEABILITY_MATRIX.md`.
 
@@ -53,7 +53,17 @@ python scripts/generate_golden_workbook.py
 python scripts/benchmark_m1b.py
 python scripts/benchmark_export.py
 python scripts/benchmark_m2a.py
+python scripts/benchmark_m2b.py
 ```
+
+## Reconciliation Studio
+
+Open the **Reconcile** workspace after starting the API and web app. Import two
+canonical CSV/Excel datasets, choose business keys and comparison fields, preview
+normalisation, order matching stages, inspect candidate budgets, and submit the
+full background run. Successful runs expose Excel, CSV, JSON, and deterministic
+ZIP evidence. Ambiguous candidates remain pending until an append-only review
+decision is recorded.
 
 ## Runtime safety
 
@@ -61,4 +71,4 @@ Runtime uploads, projects, run folders, outputs, and SQLite metadata are created
 
 ## Scope
 
-Implemented work covers Milestones 0, 1A, 1B, and 2A. Fuzzy/staged reconciliation, dataset comparison, schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.
+Implemented work covers Milestones 0, 1A, 1B, 2A, and 2B. Schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.

@@ -1,0 +1,7 @@
+{
+  "events": [
+    {"decision": "approve_suggested_match", "reviewer": "reviewer-a"},
+    {"decision": "reject_all_candidates", "reviewer": "reviewer-b", "supersedes": 0}
+  ],
+  "expected": {"event_count": 2, "current_status": "rejected", "history_deleted": false}
+}

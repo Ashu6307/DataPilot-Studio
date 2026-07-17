@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-from packages.contracts import SourceHandle, WorkflowConfiguration
+from packages.contracts import ReconciliationWorkflow, SourceHandle, WorkflowConfiguration
 from packages.data_engine import EngineRuntime, Workspace
 
 ROOT = Path("samples/profiles")
@@ -16,6 +16,13 @@ PROFILE_NAMES = {
     "invoice_preparation",
     "inventory_movement",
     "generic_monthly_consolidation",
+}
+RECONCILIATION_PROFILE_NAMES = {
+    "old_new_report_comparison",
+    "vendor_invoice_reconciliation",
+    "attendance_master_integrity",
+    "inventory_system_reconciliation",
+    "customer_deduplication_preparation",
 }
 
 
@@ -41,7 +48,7 @@ def _preview(profile: str, input_name: str, tmp_path: Path):
 
 
 def test_all_five_profiles_are_complete_anonymised_and_valid() -> None:
-    assert {path.name for path in ROOT.iterdir() if path.is_dir()} == PROFILE_NAMES
+    assert {path.name for path in ROOT.iterdir() if path.is_dir()} >= PROFILE_NAMES
     for profile in PROFILE_NAMES:
         root = ROOT / profile
         assert (root / "README.md").exists()
@@ -50,6 +57,23 @@ def test_all_five_profiles_are_complete_anonymised_and_valid() -> None:
         workflow = _workflow(profile)
         assert workflow.schema_version == "1.1"
         assert workflow.compatibility_version == 1
+        assert isinstance(workflow.id, UUID)
+        serialised = json.dumps(workflow.model_dump(mode="json")).casefold()
+        assert "private limited" not in serialised
+        assert "pvt ltd" not in serialised
+
+
+def test_all_five_reconciliation_profiles_are_anonymised_and_valid() -> None:
+    assert {path.name for path in ROOT.iterdir() if path.is_dir()} >= RECONCILIATION_PROFILE_NAMES
+    for profile in RECONCILIATION_PROFILE_NAMES:
+        root = ROOT / profile
+        assert (root / "README.md").exists()
+        assert (root / "left.csv").exists()
+        assert (root / "right.csv").exists()
+        workflow = ReconciliationWorkflow.model_validate_json(
+            (root / "workflow.json").read_text(encoding="utf-8")
+        )
+        assert workflow.schema_version == "2b.1"
         assert isinstance(workflow.id, UUID)
         serialised = json.dumps(workflow.model_dump(mode="json")).casefold()
         assert "private limited" not in serialised

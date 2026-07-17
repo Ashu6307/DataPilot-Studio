@@ -1,0 +1,7 @@
+record_key,category,amount,event_date,comment
+001,A,100.00,2026-01-01,unchanged
+002,B,200.00,2026-01-02,old value
+003,C,300.00,2026-01-03,removed
+004,D,400.00,2026-01-04,duplicate one
+004,D,401.00,2026-01-04,duplicate two
+,E,500.00,2026-01-05,null key

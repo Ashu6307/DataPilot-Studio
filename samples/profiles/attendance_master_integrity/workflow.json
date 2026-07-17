@@ -1,0 +1,13 @@
+{
+  "schema_version": "2b.1", "id": "22000000-0000-4000-8000-000000000003", "version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000003", "display_name": "Attendance to Employee Master Integrity",
+  "left_dataset_id": "21000000-0000-4000-8000-000000000005", "right_dataset_id": "21000000-0000-4000-8000-000000000006",
+  "referential_integrity": {
+    "schema_version": "2b.1", "id": "24000000-0000-4000-8000-000000000001", "version": 1,
+    "project_id": "20000000-0000-4000-8000-000000000003",
+    "parent_dataset_id": "21000000-0000-4000-8000-000000000005", "child_dataset_id": "21000000-0000-4000-8000-000000000006",
+    "parent_key_fields": ["entity_id", "site"], "child_reference_fields": ["entity_ref", "site_ref"]
+  },
+  "stages": [{"schema_version": "2b.1", "id": "exact_reference", "name": "Exact reference", "priority": 1,
+    "left_key_fields": ["entity_id", "site"], "right_key_fields": ["entity_ref", "site_ref"], "method": "exact"}]
+}

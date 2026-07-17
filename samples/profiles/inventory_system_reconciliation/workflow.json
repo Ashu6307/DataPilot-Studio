@@ -1,0 +1,13 @@
+{
+  "schema_version": "2b.1", "id": "22000000-0000-4000-8000-000000000004", "version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000004", "display_name": "Inventory System Reconciliation",
+  "left_dataset_id": "21000000-0000-4000-8000-000000000007", "right_dataset_id": "21000000-0000-4000-8000-000000000008",
+  "stages": [
+    {"schema_version": "2b.1", "id": "exact_item_location", "name": "Exact item and location", "priority": 1,
+     "left_key_fields": ["item_key", "warehouse_key"], "right_key_fields": ["item_key", "warehouse_key"], "method": "exact"},
+    {"schema_version": "2b.1", "id": "quantity_tolerance", "name": "Quantity tolerance", "priority": 2,
+     "left_key_fields": ["quantity"], "right_key_fields": ["quantity"], "method": "numeric_tolerance", "threshold": "0.5",
+     "numeric_tolerances": {"quantity": {"mode": "absolute_difference", "tolerance": "2"}},
+     "candidate_constraints": [{"id": "same_location", "method": "exact", "left_field": "warehouse_key", "right_field": "warehouse_key"}]}
+  ]
+}

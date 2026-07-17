@@ -22,6 +22,8 @@ from packages.contracts import (
     CompositionPreview,
     CompositionPreviewRequest,
     CompositionRunRequest,
+    DecisionMemory,
+    DecisionMemoryDeactivateRequest,
     DiscoveryOverrides,
     DiscoveryResult,
     FolderScanRequest,
@@ -34,21 +36,35 @@ from packages.contracts import (
     PreviewResult,
     Project,
     ProjectCreate,
+    ReconciliationExportManifest,
+    ReconciliationJobSubmission,
+    ReconciliationPreviewRequest,
+    ReconciliationResult,
+    ReconciliationRunRecord,
+    ReconciliationRunRequest,
+    ReconciliationWorkflow,
+    ReviewDecisionEvent,
+    ReviewQueueItem,
     RunRecord,
     RunRequest,
     SchemaDriftRequest,
     SchemaDriftResult,
     SourceHandle,
+    StructureComparisonRequest,
+    StructureComparisonResult,
     WorkflowConfiguration,
 )
 from packages.data_engine import LocalJobExecutor, Workspace
+from packages.data_engine.comparison import compare_structures
 from packages.data_engine.composition_background import LocalCompositionJobExecutor
+from packages.data_engine.reconciliation_background import LocalReconciliationJobExecutor
 from packages.data_engine.schema_drift import analyze_schema_drift, repair_mapping
 
 from .composition_job_store import SQLiteCompositionJobStore
 from .config import load_settings
 from .database import Database
 from .job_store import SQLiteJobStore
+from .reconciliation_job_store import SQLiteReconciliationJobStore
 from .repositories import SQLiteMetadataRepository
 from .services import DataPilotService
 
@@ -59,16 +75,21 @@ workspace = Workspace(settings.workspace)
 service = DataPilotService(repository, workspace)
 job_store = SQLiteJobStore(database)
 composition_job_store = SQLiteCompositionJobStore(database)
+reconciliation_job_store = SQLiteReconciliationJobStore(database)
 job_executor: LocalJobExecutor | None = None
 composition_job_executor: LocalCompositionJobExecutor | None = None
+reconciliation_job_executor: LocalReconciliationJobExecutor | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global composition_job_executor, job_executor
+    global composition_job_executor, job_executor, reconciliation_job_executor
     database.initialize()
     job_executor = LocalJobExecutor(job_store, service.run_background)
     composition_job_executor = LocalCompositionJobExecutor(composition_job_store, service.run_composition_background)
+    reconciliation_job_executor = LocalReconciliationJobExecutor(
+        reconciliation_job_store, service.run_reconciliation_background
+    )
     try:
         yield
     finally:
@@ -76,8 +97,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             job_executor.shutdown()
         if composition_job_executor is not None:
             composition_job_executor.shutdown()
+        if reconciliation_job_executor is not None:
+            reconciliation_job_executor.shutdown()
         job_executor = None
         composition_job_executor = None
+        reconciliation_job_executor = None
 
 
 app = FastAPI(
@@ -109,6 +133,12 @@ def get_composition_job_executor() -> LocalCompositionJobExecutor:
     if composition_job_executor is None:
         raise HTTPException(503, "COMPOSITION_EXECUTOR_NOT_READY")
     return composition_job_executor
+
+
+def get_reconciliation_job_executor() -> LocalReconciliationJobExecutor:
+    if reconciliation_job_executor is None:
+        raise HTTPException(503, "RECONCILIATION_EXECUTOR_NOT_READY")
+    return reconciliation_job_executor
 
 
 @app.get("/health")
@@ -167,6 +197,17 @@ def validate_mapping(mapping: MappingSet) -> MappingSet:
 @app.post("/api/v1/schema-drift/analyze", response_model=SchemaDriftResult)
 def analyze_drift(request: SchemaDriftRequest) -> SchemaDriftResult:
     return analyze_schema_drift(request.expectation, request.observed, request.policy)
+
+
+@app.post("/api/v1/structures/compare", response_model=StructureComparisonResult)
+def compare_dataset_structures(request: StructureComparisonRequest) -> StructureComparisonResult:
+    return compare_structures(
+        request.expectation,
+        request.observed,
+        request.policy,
+        expected_key_unique=request.expected_key_unique,
+        observed_key_unique=request.observed_key_unique,
+    )
 
 
 @app.post("/api/v1/mappings/repair", response_model=MappingRepairResponse)
@@ -275,6 +316,147 @@ def get_batch_manifest(run_id: UUID) -> BatchManifest:
     manifest = repository.get_batch_manifest(run_id)
     if manifest is None:
         raise HTTPException(404, "BATCH_MANIFEST_NOT_FOUND")
+    return manifest
+
+
+@app.post("/api/v1/reconciliation-workflows", response_model=ReconciliationWorkflow, status_code=201)
+def save_reconciliation_workflow(
+    workflow: ReconciliationWorkflow,
+    current: DataPilotService = Depends(get_service),
+) -> ReconciliationWorkflow:
+    try:
+        return current.save_reconciliation_workflow(workflow)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/reconciliation-workflows",
+    response_model=list[ReconciliationWorkflow],
+)
+def list_reconciliation_workflows(project_id: UUID) -> list[ReconciliationWorkflow]:
+    return repository.list_reconciliation_workflows(project_id)
+
+
+@app.post("/api/v1/reconciliations/preview", response_model=ReconciliationResult)
+def preview_reconciliation(
+    request: ReconciliationPreviewRequest,
+    current: DataPilotService = Depends(get_service),
+) -> ReconciliationResult:
+    try:
+        return current.preview_reconciliation(request)
+    except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/reconciliation-jobs", response_model=BackgroundJobRecord, status_code=202)
+def submit_reconciliation_job(
+    request: ReconciliationRunRequest,
+    executor: LocalReconciliationJobExecutor = Depends(get_reconciliation_job_executor),
+) -> BackgroundJobRecord:
+    return executor.submit(ReconciliationJobSubmission(run=request))
+
+
+@app.get("/api/v1/reconciliation-jobs/{job_id}", response_model=BackgroundJobRecord)
+def get_reconciliation_job(job_id: UUID) -> BackgroundJobRecord:
+    job = reconciliation_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(404, "JOB_NOT_FOUND")
+    return job
+
+
+@app.get("/api/v1/reconciliation-jobs/{job_id}/events", response_model=list[JobProgressEvent])
+def get_reconciliation_events(job_id: UUID) -> list[JobProgressEvent]:
+    return reconciliation_job_store.events(job_id)
+
+
+@app.get("/api/v1/reconciliation-jobs/{job_id}/checkpoints", response_model=list[CheckpointRecord])
+def get_reconciliation_checkpoints(job_id: UUID) -> list[CheckpointRecord]:
+    return reconciliation_job_store.checkpoints(job_id)
+
+
+@app.post("/api/v1/reconciliation-jobs/{job_id}/cancel", response_model=BackgroundJobRecord)
+def cancel_reconciliation_job(
+    job_id: UUID,
+    executor: LocalReconciliationJobExecutor = Depends(get_reconciliation_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.cancel(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@app.post("/api/v1/reconciliation-jobs/{job_id}/retry", response_model=BackgroundJobRecord, status_code=202)
+def retry_reconciliation_job(
+    job_id: UUID,
+    executor: LocalReconciliationJobExecutor = Depends(get_reconciliation_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.retry(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/api/v1/reconciliation-runs/{run_id}", response_model=ReconciliationRunRecord)
+def get_reconciliation_run(run_id: UUID) -> ReconciliationRunRecord:
+    record = repository.get_reconciliation_run(run_id)
+    if record is None:
+        raise HTTPException(404, "RECONCILIATION_RUN_NOT_FOUND")
+    return record
+
+
+@app.get("/api/v1/reconciliation-runs/{run_id}/reviews", response_model=list[ReviewQueueItem])
+def list_reconciliation_reviews(run_id: UUID, status: str | None = None) -> list[ReviewQueueItem]:
+    return repository.list_review_items(run_id, status)
+
+
+@app.post("/api/v1/review-items/{review_item_id}/decisions", response_model=ReviewDecisionEvent, status_code=201)
+def decide_review_item(review_item_id: UUID, event: ReviewDecisionEvent) -> ReviewDecisionEvent:
+    if event.review_item_id != review_item_id:
+        raise HTTPException(422, "REVIEW_ITEM_ID_MISMATCH")
+    try:
+        return repository.append_review_decision(event)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get("/api/v1/review-items/{review_item_id}/decisions", response_model=list[ReviewDecisionEvent])
+def list_review_decisions(review_item_id: UUID) -> list[ReviewDecisionEvent]:
+    return repository.list_review_decisions(review_item_id)
+
+
+@app.post("/api/v1/decision-memory", response_model=DecisionMemory, status_code=201)
+def save_decision_memory(memory: DecisionMemory) -> DecisionMemory:
+    return repository.save_decision_memory(memory)
+
+
+@app.get("/api/v1/projects/{project_id}/decision-memory", response_model=list[DecisionMemory])
+def list_decision_memory(project_id: UUID, active_only: bool = True) -> list[DecisionMemory]:
+    return repository.list_decision_memory(project_id, active_only)
+
+
+@app.get("/api/v1/projects/{project_id}/decision-memory/export", response_model=list[DecisionMemory])
+def export_decision_memory(project_id: UUID, actor: str = "local-user") -> list[DecisionMemory]:
+    return repository.export_decision_memory(project_id, actor)
+
+
+@app.post("/api/v1/decision-memory/{memory_id}/deactivate", response_model=DecisionMemory)
+def deactivate_decision_memory(memory_id: UUID, request: DecisionMemoryDeactivateRequest) -> DecisionMemory:
+    try:
+        return repository.deactivate_decision_memory(memory_id, request.actor, request.reason)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@app.get("/api/v1/reconciliation-manifests/{run_id}", response_model=ReconciliationExportManifest)
+def get_reconciliation_manifest(run_id: UUID) -> ReconciliationExportManifest:
+    manifest = repository.get_reconciliation_manifest(run_id)
+    if manifest is None:
+        raise HTTPException(404, "RECONCILIATION_MANIFEST_NOT_FOUND")
     return manifest
 
 

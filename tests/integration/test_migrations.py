@@ -26,7 +26,7 @@ def test_existing_m1a_database_is_backed_up_and_upgraded(tmp_path: Path) -> None
     database = Database(path)
     database.initialize()
     assert database.last_migration_report is not None
-    assert database.last_migration_report.to_version == 3
+    assert database.last_migration_report.to_version == 4
     assert database.last_migration_report.backup_path is not None
     assert Path(database.last_migration_report.backup_path).exists()
     with database.connect() as upgraded:
@@ -46,6 +46,13 @@ def test_existing_m1a_database_is_backed_up_and_upgraded(tmp_path: Path) -> None
             "alignment_decisions",
             "batch_manifests",
             "folder_scan_history",
+            "reconciliation_workflows",
+            "reconciliation_runs",
+            "review_items",
+            "review_decision_events",
+            "decision_memory",
+            "decision_memory_events",
+            "reconciliation_export_manifests",
         } <= tables
         assert upgraded.execute("SELECT name FROM projects WHERE id = 'p'").fetchone()[0] == "Existing"
 
@@ -91,7 +98,7 @@ def test_workflow_v1_migrates_with_report_and_file_backup(
     ):
         discovery.pop(key, None)
     migrated, report = migrate_workflow_payload(payload)
-    assert migrated["schema_version"] == "1.2"
+    assert migrated["schema_version"] == "1.3"
     assert "calculations" in report.changed_paths
     WorkflowConfiguration.model_validate(migrated)
 
@@ -100,7 +107,22 @@ def test_workflow_v1_migrates_with_report_and_file_backup(
     file_report = migrate_workflow_file(path, tmp_path / "backups")
     assert file_report.backup_path and Path(file_report.backup_path).exists()
     loaded = WorkflowConfiguration.model_validate_json(path.read_text(encoding="utf-8"))
-    assert loaded.schema_version == "1.2"
+    assert loaded.schema_version == "1.3"
+
+
+def test_workflow_v12_migrates_to_v13_without_mutating_original(workflow: WorkflowConfiguration) -> None:
+    payload = workflow.model_dump(mode="json")
+    payload["schema_version"] = "1.2"
+    payload.pop("reconciliation_workflow_id", None)
+    payload.pop("reconciliation_workflow_version", None)
+    original = json.loads(json.dumps(payload, default=str))
+    migrated, report = migrate_workflow_payload(payload)
+    assert payload == original
+    assert migrated["schema_version"] == "1.3"
+    assert migrated["reconciliation_workflow_id"] is None
+    assert migrated["reconciliation_workflow_version"] is None
+    assert report.from_version == "1.2"
+    assert report.to_version == "1.3"
 
 
 def test_future_workflow_version_blocks_actionably(workflow: WorkflowConfiguration) -> None:

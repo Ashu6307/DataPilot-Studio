@@ -3,13 +3,38 @@
 from __future__ import annotations
 
 import csv
+import re
 import shutil
+import zipfile
+from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "composition"
+
+
+def _normalise_xlsx_archive(path: Path) -> None:
+    temporary = path.with_suffix(".deterministic.tmp")
+    with zipfile.ZipFile(path, "r") as source:
+        entries = [
+            (item.filename, source.read(item.filename), item.compress_type, item.external_attr)
+            for item in source.infolist()
+        ]
+    with zipfile.ZipFile(temporary, "w") as target:
+        for name, payload, compression, external_attr in sorted(entries):
+            if name == "docProps/core.xml":
+                payload = re.sub(
+                    rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)",
+                    rb"\g<1>1980-01-01T00:00:00Z\g<2>",
+                    payload,
+                )
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = compression
+            info.external_attr = external_attr
+            target.writestr(info, payload)
+    temporary.replace(path)
 
 
 def _csv(name: str, headers: list[str], rows: list[list[object]]) -> Path:
@@ -68,11 +93,15 @@ def main() -> None:
             [[batch * 10_000 + row, f"D{row % 20:02d}", row % 1000] for row in range(10_000)],
         )
     workbook = Workbook()
+    workbook.properties.created = datetime(1980, 1, 1)
+    workbook.properties.modified = datetime(1980, 1, 1)
     sheet = workbook.active
     sheet.title = "A" * 31
     sheet.append(["split_value", "value"])
     sheet.append(["B" * 80, 1])
-    workbook.save(FIXTURES / "excel_sheet_name_limit.xlsx")
+    workbook_path = FIXTURES / "excel_sheet_name_limit.xlsx"
+    workbook.save(workbook_path)
+    _normalise_xlsx_archive(workbook_path)
     (FIXTURES / "partial_corrupted.xlsx").write_bytes(b"not-an-ooxml-workbook")
 
 

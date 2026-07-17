@@ -1,0 +1,4 @@
+reference_a,reference_b,value
+01,A,valid
+09,Z,missing
+,A,null

@@ -18,10 +18,12 @@ Multi-source/folder ingestion, versioned canonical alignment, append/union, exac
 joins with cardinality gates, grouped aggregation, pivot/unpivot, dynamic split,
 derived-only evidence packages, background execution, and Composition Studio UI.
 
-## Milestone 2B — Reconciliation and comparison
+## Milestone 2B — Reconciliation and comparison (complete, 2026-07-17)
 
-Referential integrity, key-based dataset comparison, staged exact/tolerance/fuzzy
-reconciliation, review queues, and report templates.
+Generic referential integrity, key/structure comparison, deterministic
+normalisation, staged exact/tolerance/fuzzy/weighted matching, governed review and
+decision memory, professional evidence packages, background execution, and the
+Reconciliation Studio UI.
 
 ## Milestone 3 — Workflow platform
 
