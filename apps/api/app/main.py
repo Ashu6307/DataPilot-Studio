@@ -13,9 +13,18 @@ from fastapi.responses import FileResponse
 
 from packages.contracts import (
     BackgroundJobRecord,
+    BatchCatalog,
+    BatchCatalogRequest,
+    BatchManifest,
     CheckpointRecord,
+    CompositionJobSubmission,
+    CompositionPlan,
+    CompositionPreview,
+    CompositionPreviewRequest,
+    CompositionRunRequest,
     DiscoveryOverrides,
     DiscoveryResult,
+    FolderScanRequest,
     JobProgressEvent,
     JobSubmission,
     MappingRepairRequest,
@@ -33,8 +42,10 @@ from packages.contracts import (
     WorkflowConfiguration,
 )
 from packages.data_engine import LocalJobExecutor, Workspace
+from packages.data_engine.composition_background import LocalCompositionJobExecutor
 from packages.data_engine.schema_drift import analyze_schema_drift, repair_mapping
 
+from .composition_job_store import SQLiteCompositionJobStore
 from .config import load_settings
 from .database import Database
 from .job_store import SQLiteJobStore
@@ -47,20 +58,26 @@ repository = SQLiteMetadataRepository(database)
 workspace = Workspace(settings.workspace)
 service = DataPilotService(repository, workspace)
 job_store = SQLiteJobStore(database)
+composition_job_store = SQLiteCompositionJobStore(database)
 job_executor: LocalJobExecutor | None = None
+composition_job_executor: LocalCompositionJobExecutor | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global job_executor
+    global composition_job_executor, job_executor
     database.initialize()
     job_executor = LocalJobExecutor(job_store, service.run_background)
+    composition_job_executor = LocalCompositionJobExecutor(composition_job_store, service.run_composition_background)
     try:
         yield
     finally:
         if job_executor is not None:
             job_executor.shutdown()
+        if composition_job_executor is not None:
+            composition_job_executor.shutdown()
         job_executor = None
+        composition_job_executor = None
 
 
 app = FastAPI(
@@ -86,6 +103,12 @@ def get_job_executor() -> LocalJobExecutor:
     if job_executor is None:
         raise HTTPException(503, "BACKGROUND_EXECUTOR_NOT_READY")
     return job_executor
+
+
+def get_composition_job_executor() -> LocalCompositionJobExecutor:
+    if composition_job_executor is None:
+        raise HTTPException(503, "COMPOSITION_EXECUTOR_NOT_READY")
+    return composition_job_executor
 
 
 @app.get("/health")
@@ -156,6 +179,103 @@ def repair_drift_mapping(request: MappingRepairRequest) -> MappingRepairResponse
         request.run_id,
     )
     return MappingRepairResponse(mapping=mapping, audit=audit)
+
+
+@app.post("/api/v1/batches/catalog", response_model=BatchCatalog)
+def catalog_batch(request: BatchCatalogRequest, current: DataPilotService = Depends(get_service)) -> BatchCatalog:
+    try:
+        return current.batch_catalog(request)
+    except (FileNotFoundError, ValueError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/folders/scan", response_model=BatchCatalog)
+def scan_local_folder(request: FolderScanRequest, current: DataPilotService = Depends(get_service)) -> BatchCatalog:
+    try:
+        return current.scan_folder(request)
+    except (FileNotFoundError, ValueError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/composition-plans", response_model=CompositionPlan, status_code=201)
+def save_composition_plan(plan: CompositionPlan, current: DataPilotService = Depends(get_service)) -> CompositionPlan:
+    try:
+        return current.save_composition_plan(plan)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get("/api/v1/projects/{project_id}/composition-plans", response_model=list[CompositionPlan])
+def list_composition_plans(project_id: UUID) -> list[CompositionPlan]:
+    return repository.list_composition_plans(project_id)
+
+
+@app.post("/api/v1/compositions/preview", response_model=CompositionPreview)
+def preview_composition(
+    request: CompositionPreviewRequest, current: DataPilotService = Depends(get_service)
+) -> CompositionPreview:
+    try:
+        return current.preview_composition(request)
+    except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/composition-jobs", response_model=BackgroundJobRecord, status_code=202)
+def submit_composition_job(
+    request: CompositionRunRequest,
+    executor: LocalCompositionJobExecutor = Depends(get_composition_job_executor),
+) -> BackgroundJobRecord:
+    return executor.submit(CompositionJobSubmission(run=request))
+
+
+@app.get("/api/v1/composition-jobs/{job_id}", response_model=BackgroundJobRecord)
+def get_composition_job(job_id: UUID) -> BackgroundJobRecord:
+    job = composition_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(404, "JOB_NOT_FOUND")
+    return job
+
+
+@app.get("/api/v1/composition-jobs/{job_id}/events", response_model=list[JobProgressEvent])
+def get_composition_events(job_id: UUID) -> list[JobProgressEvent]:
+    return composition_job_store.events(job_id)
+
+
+@app.get("/api/v1/composition-jobs/{job_id}/checkpoints", response_model=list[CheckpointRecord])
+def get_composition_checkpoints(job_id: UUID) -> list[CheckpointRecord]:
+    return composition_job_store.checkpoints(job_id)
+
+
+@app.post("/api/v1/composition-jobs/{job_id}/cancel", response_model=BackgroundJobRecord)
+def cancel_composition_job(
+    job_id: UUID,
+    executor: LocalCompositionJobExecutor = Depends(get_composition_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.cancel(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@app.post("/api/v1/composition-jobs/{job_id}/retry", response_model=BackgroundJobRecord, status_code=202)
+def retry_composition_job(
+    job_id: UUID,
+    executor: LocalCompositionJobExecutor = Depends(get_composition_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.retry(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/api/v1/batch-manifests/{run_id}", response_model=BatchManifest)
+def get_batch_manifest(run_id: UUID) -> BatchManifest:
+    manifest = repository.get_batch_manifest(run_id)
+    if manifest is None:
+        raise HTTPException(404, "BATCH_MANIFEST_NOT_FOUND")
+    return manifest
 
 
 @app.post("/api/v1/workflows/validate", response_model=WorkflowConfiguration)

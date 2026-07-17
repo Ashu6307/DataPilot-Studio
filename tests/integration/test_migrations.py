@@ -26,7 +26,7 @@ def test_existing_m1a_database_is_backed_up_and_upgraded(tmp_path: Path) -> None
     database = Database(path)
     database.initialize()
     assert database.last_migration_report is not None
-    assert database.last_migration_report.to_version == 2
+    assert database.last_migration_report.to_version == 3
     assert database.last_migration_report.backup_path is not None
     assert Path(database.last_migration_report.backup_path).exists()
     with database.connect() as upgraded:
@@ -36,7 +36,17 @@ def test_existing_m1a_database_is_backed_up_and_upgraded(tmp_path: Path) -> None
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             ).fetchall()
         }
-        assert {"schema_migrations", "jobs", "job_events", "checkpoints", "mapping_decisions"} <= tables
+        assert {
+            "schema_migrations",
+            "jobs",
+            "job_events",
+            "checkpoints",
+            "mapping_decisions",
+            "composition_plans",
+            "alignment_decisions",
+            "batch_manifests",
+            "folder_scan_history",
+        } <= tables
         assert upgraded.execute("SELECT name FROM projects WHERE id = 'p'").fetchone()[0] == "Existing"
 
 
@@ -81,7 +91,7 @@ def test_workflow_v1_migrates_with_report_and_file_backup(
     ):
         discovery.pop(key, None)
     migrated, report = migrate_workflow_payload(payload)
-    assert migrated["schema_version"] == "1.1"
+    assert migrated["schema_version"] == "1.2"
     assert "calculations" in report.changed_paths
     WorkflowConfiguration.model_validate(migrated)
 
@@ -90,7 +100,7 @@ def test_workflow_v1_migrates_with_report_and_file_backup(
     file_report = migrate_workflow_file(path, tmp_path / "backups")
     assert file_report.backup_path and Path(file_report.backup_path).exists()
     loaded = WorkflowConfiguration.model_validate_json(path.read_text(encoding="utf-8"))
-    assert loaded.schema_version == "1.1"
+    assert loaded.schema_version == "1.2"
 
 
 def test_future_workflow_version_blocks_actionably(workflow: WorkflowConfiguration) -> None:

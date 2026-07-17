@@ -13,11 +13,13 @@ import { StatusChip } from "./components/StatusChip";
 import type {
   BackgroundJob, CalculatedField, CanonicalField, ColumnMapping, DiscoveryResult, OperationNode,
   PreviewResult, Project, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery,
+  BatchCatalog, BatchManifest, CompositionOperation, CompositionPlan, CompositionPreview,
   ValidationRule, Workflow,
 } from "./types";
 
 const stages = [
   { id: "workspace", label: "Workspace", icon: Layers3 },
+  { id: "composition", label: "Composition studio", icon: Table2 },
   { id: "import", label: "Import dataset", icon: UploadCloud },
   { id: "inspect", label: "Source inspection", icon: FileSearch },
   { id: "profile", label: "Column profile", icon: Activity },
@@ -70,6 +72,7 @@ function App() {
 
   function canVisit(target: Stage) {
     if (["workspace", "import", "history"].includes(target)) return true;
+    if (target === "composition") return Boolean(project);
     if (["inspect", "profile"].includes(target)) return Boolean(discovery);
     if (["mapping", "drift", "cleaning", "calculations", "validation", "preview"].includes(target)) return Boolean(workflow);
     if (target === "queue") return Boolean(job);
@@ -165,7 +168,7 @@ function App() {
       reason_code: `${outputId.toUpperCase()}_CALCULATION_FAILED`, description: `${left} ${functionName} ${right}`,
       lineage_enabled: true,
     };
-    setWorkflow({ ...workflow, schema_version: "1.1", calculations: [...workflow.calculations, calculation], updated_at: new Date().toISOString() });
+    setWorkflow({ ...workflow, schema_version: "1.2", calculations: [...workflow.calculations, calculation], updated_at: new Date().toISOString() });
   }
 
   function addRule(ruleType: ValidationRule["rule_type"], fieldId: string) {
@@ -244,6 +247,7 @@ function App() {
           {busy && <div className="busy-banner" role="status"><LoaderCircle className="spin" size={18} />{busy}</div>}
           {error && <div className="error-banner" role="alert"><XCircle size={19} /><div><strong>Action could not be completed</strong><span>{error}</span></div><button onClick={() => setError(null)} aria-label="Dismiss error"><X size={17} /></button></div>}
           {stage === "workspace" && <WorkspaceScreen project={project} runs={runs} onCreate={createProject} onContinue={() => setStage("import")} />}
+          {stage === "composition" && project && <CompositionStudioScreen project={project} />}
           {stage === "import" && <ImportScreen project={project} source={source} onCreate={createProject} onUpload={upload} onContinue={() => discovery && setStage("inspect")} />}
           {stage === "inspect" && discovery && table && <InspectScreen discovery={discovery} table={table} onSelect={rediscover} onContinue={() => setStage("profile")} />}
           {stage === "profile" && table && <ProfileScreen table={table} onContinue={() => setStage("mapping")} />}
@@ -336,6 +340,137 @@ function ResultsScreen({ run, onHistory }: { run: RunRecord; onHistory: () => vo
   return <><ScreenHead eyebrow="AUDITED RESULT" title={run.status === "succeeded" ? "Run completed safely." : "Run completed with exceptions."} description="The source fingerprint was verified after processing and outputs were reopened before finalisation." step="8 of 9"/><section className={run.status === "succeeded" ? "result-hero success-result" : "result-hero warning-result"}><div>{run.status === "succeeded" ? <CheckCircle2/> : <AlertTriangle/>}</div><span className="eyebrow">RUN STATUS</span><h2>{run.status.replaceAll("_"," ")}</h2><p>Run <code>{run.id}</code> · workflow v{run.workflow_version} · {run.duration_ms} ms</p></section><section className="metrics-grid"><MetricCard icon={Database} label="Rows read" value={run.rows_read} note="Source table records"/><MetricCard icon={CheckCircle2} label="Rows written" value={run.rows_written} note="Processed Data sheet" tone="success"/><MetricCard icon={XCircle} label="Rows rejected" value={run.rows_rejected} note="Reasons included" tone="danger"/><MetricCard icon={Fingerprint} label="Fingerprint" value={run.source_fingerprint.slice(0,8)} note="Unchanged after run"/></section><div className="workspace-grid"><section className="panel"><div className="panel-title"><div><span className="eyebrow">OUTPUT ARTIFACT</span><h3>Professional workbook pack</h3></div><FileOutput/></div><div className="artifact-card"><div className="file-icon large"><FileOutput/></div><div><strong>{run.source_filename.replace(/\.[^.]+$/, "")}_output.xlsx</strong><span>Processed · Summary · Errors · Audit · Metadata · Rules</span></div><a className="primary-button" href={api.artifactUrl(run.id)}><Download size={17}/>Download workbook</a></div></section><section className="panel"><div className="panel-title"><div><span className="eyebrow">SOURCE EVIDENCE</span><h3>Immutable input</h3></div><ShieldCheck/></div><dl className="evidence-list"><div><dt>Source</dt><dd>{run.source_filename}</dd></div><div><dt>SHA-256</dt><dd><code>{run.source_fingerprint}</code></dd></div><div><dt>Reconciliation</dt><dd>{run.rows_read} = {run.rows_written} + {run.rows_rejected} + {run.rows_filtered}</dd></div></dl></section></div><div className="sticky-action"><div><strong>Run evidence is stored locally</strong><span>SQLite contains metadata only, never source rows</span></div><button className="secondary-button" onClick={onHistory}><History size={17}/>View run history</button></div></>;
 }
 
+const compositionSteps = [
+  "Multi-source selection", "Folder scan configuration", "Batch source preview", "Schema alignment matrix",
+  "Append configuration", "Join builder", "Cardinality warning", "Group and aggregation builder",
+  "Pivot builder", "Unpivot builder", "Split configuration", "Output naming preview",
+  "Batch execution progress", "Batch result manifest",
+];
+
+function CompositionStudioScreen({ project }: { project: Project }) {
+  const [sources, setSources] = useState<SourceHandle[]>([]);
+  const [catalog, setCatalog] = useState<BatchCatalog | null>(null);
+  const [operation, setOperation] = useState<CompositionOperation>("append");
+  const [selectedField, setSelectedField] = useState("");
+  const [folderPath, setFolderPath] = useState("");
+  const [recursive, setRecursive] = useState(true);
+  const [search, setSearch] = useState("");
+  const [alignmentOverrides, setAlignmentOverrides] = useState<Record<string, Record<string, string>>>({});
+  const [preview, setPreview] = useState<CompositionPreview | null>(null);
+  const [previewedPlan, setPreviewedPlan] = useState<CompositionPlan | null>(null);
+  const [job, setJob] = useState<BackgroundJob | null>(null);
+  const [manifest, setManifest] = useState<BatchManifest | null>(null);
+  const [planId] = useState(() => crypto.randomUUID());
+  const [localBusy, setLocalBusy] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const fields = canonicalCompositionFields(catalog);
+  const activeField = selectedField || fields[0]?.id || "";
+
+  async function uploadBatch(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []); if (!files.length) return;
+    setLocalBusy(`Importing ${files.length} immutable sources…`); setLocalError(null); setManifest(null);
+    try {
+      const uploaded = await Promise.all(files.map((file) => api.uploadSource(project.id, file)));
+      const next = [...sources, ...uploaded]; setSources(next);
+      setCatalog(await api.catalogBatch(project.id, next.map((item) => item.id))); setPreview(null); setPreviewedPlan(null);
+    } catch (reason) { setLocalError(messageOf(reason)); }
+    finally { setLocalBusy(null); event.target.value = ""; }
+  }
+
+  async function scanFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setLocalBusy("Scanning local folder and profiling eligible tables…"); setLocalError(null);
+    try { setCatalog(await api.scanFolder(project.id, folderPath, recursive, ["*"], ["~$*", "*.tmp.*"])); setPreview(null); setPreviewedPlan(null); }
+    catch (reason) { setLocalError(messageOf(reason)); }
+    finally { setLocalBusy(null); }
+  }
+
+  function currentPlan() { return buildCompositionPlan(project, catalog, operation, activeField, planId, alignmentOverrides); }
+
+  function updateAlignment(sourceId: string, canonicalId: string, sourceField: string) {
+    setAlignmentOverrides((current) => ({
+      ...current,
+      [sourceId]: { ...current[sourceId], [canonicalId]: sourceField },
+    }));
+    setPreview(null); setPreviewedPlan(null);
+  }
+
+  async function previewPlan() {
+    if (!catalog) return; setLocalBusy("Computing bounded composition preview…"); setLocalError(null);
+    try { const plan = currentPlan(); setPreview(await api.previewComposition(plan)); setPreviewedPlan(plan); }
+    catch (reason) { setLocalError(messageOf(reason)); }
+    finally { setLocalBusy(null); }
+  }
+
+  async function executePlan() {
+    if (!catalog || !previewedPlan) return; setLocalBusy("Submitting persistent composition job…"); setLocalError(null); setManifest(null);
+    try {
+      const submitted = await api.submitComposition(previewedPlan); setJob(submitted); setLocalBusy(null);
+      for (;;) {
+        const current = await api.getCompositionJob(submitted.id); setJob(current);
+        if (["succeeded", "partial"].includes(current.status) && current.run_id) {
+          setManifest(await api.getBatchManifest(current.run_id)); return;
+        }
+        if (["failed", "cancelled"].includes(current.status)) {
+          if (current.error_message) setLocalError(current.error_message); return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      }
+    } catch (reason) { setLocalError(messageOf(reason)); }
+    finally { setLocalBusy(null); }
+  }
+
+  const visibleItems = catalog?.items.filter((item) =>
+    `${item.filename} ${item.discovered_schema.map((field) => field.label).join(" ")}`.toLowerCase().includes(search.toLowerCase())
+  ) ?? [];
+  return <>
+    <ScreenHead eyebrow="MILESTONE 2A" title="Compose changing datasets with explicit control." description="Align heterogeneous files to canonical fields, inspect row impact, and publish only from an audited background run." step="Composition studio" />
+    {localBusy && <div className="busy-banner" role="status"><LoaderCircle className="spin" size={18}/>{localBusy}</div>}
+    {localError && <div className="error-banner" role="alert"><XCircle size={18}/><div><strong>Composition needs attention</strong><span>{localError}</span></div></div>}
+    <section className="composition-step-grid" aria-label="Composition workflow screens">{compositionSteps.map((label, index) => <article key={label} className={(index < 4 && catalog) || (index >= 12 && job) ? "composition-step complete" : "composition-step"}><span>{index + 1}</span><strong>{label}</strong></article>)}</section>
+    <section className="metrics-grid"><MetricCard icon={FileSearch} label="Files considered" value={catalog?.files_considered ?? 0} note="Each discovered independently"/><MetricCard icon={CheckCircle2} label="Eligible" value={catalog?.files_eligible ?? 0} note="Explicit processing state" tone="success"/><MetricCard icon={AlertTriangle} label="Quarantined" value={catalog?.files_quarantined ?? 0} note="Never silently skipped" tone={catalog?.files_quarantined ? "warning" : "success"}/><MetricCard icon={Database} label="Estimated rows" value={catalog?.total_row_estimate.toLocaleString() ?? 0} note="Before full execution"/></section>
+    <div className="workspace-grid">
+      <section className="panel"><div className="panel-title"><div><span className="eyebrow">MULTI-SOURCE SELECTION</span><h3>Upload a batch</h3></div><UploadCloud/></div><label className="drop-zone composition-drop"><input type="file" multiple accept=".csv,.xlsx,.xlsm" onChange={uploadBatch}/><UploadCloud/><strong>Choose multiple Excel or CSV files</strong><span>Files are copied, fingerprinted, and remain immutable.</span></label><small>{sources.length} uploaded sources in this selection</small></section>
+      <section className="panel"><div className="panel-title"><div><span className="eyebrow">FOLDER SCAN CONFIGURATION</span><h3>Scan a local path</h3></div><FolderPlus/></div><form className="stack-form" onSubmit={scanFolder}><label>Folder path<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="D:\\incoming\\monthly" required/></label><label className="check-line"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)}/>Include nested folders</label><div className="tag-row"><span>Include *</span><span>Exclude ~$*</span><span>CSV · XLSX · XLSM</span></div><button className="secondary-button" type="submit"><FileSearch size={16}/>Scan and profile</button></form></section>
+    </div>
+    <section className="panel composition-catalog"><div className="panel-title"><div><span className="eyebrow">BATCH SOURCE PREVIEW</span><h3>Eligibility, structure, and warnings</h3></div><StatusChip value={catalog ? "profiled" : "empty"}/></div><label>Search files or fields<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search filename or discovered field"/></label>{visibleItems.length ? <div className="source-grid">{visibleItems.map((item) => <article key={item.source_id}><div className="file-icon"><Table2/></div><div><strong>{item.relative_path}</strong><span>{item.row_estimate.toLocaleString()} rows · {item.discovered_schema.length} fields · {item.table_id}</span><small>{item.fingerprint.slice(0,16)}…</small></div><StatusChip value={item.state}/></article>)}</div> : <div className="empty-state compact"><Layers3/><strong>No batch catalog yet</strong><span>Upload multiple files or scan a local folder to begin.</span></div>}</section>
+    {catalog && <>
+      <section className="panel"><div className="panel-title"><div><span className="eyebrow">SCHEMA ALIGNMENT MATRIX</span><h3>Canonical fields across every eligible source</h3></div><MapIcon/></div><div className="table-wrap"><table><thead><tr><th>Canonical field</th>{catalog.items.filter((item) => item.processing_eligible).map((item) => <th key={item.source_id}>{item.filename}</th>)}</tr></thead><tbody>{fields.filter((field) => field.label.toLowerCase().includes(search.toLowerCase())).map((field) => <tr key={field.id}><td><strong>{field.id}</strong><br/><small>{field.data_type}</small></td>{catalog.items.filter((item) => item.processing_eligible).map((item) => { const exact = item.discovered_schema.find((candidate) => candidate.id === field.id)?.label ?? ""; const selected = alignmentOverrides[item.source_id]?.[field.id] ?? exact; return <td key={item.source_id}><label className="matrix-select"><span>{selected ? "Mapped" : "Missing optional"}</span><select aria-label={`Map ${field.id} for ${item.filename}`} value={selected} onChange={(event) => updateAlignment(item.source_id,field.id,event.target.value)}><option value="">Missing optional</option>{item.discovered_schema.map((candidate) => <option key={candidate.id} value={candidate.label}>{candidate.label} · {candidate.data_type}</option>)}</select></label></td>; })}</tr>)}</tbody></table></div></section>
+      <div className="builder-grid composition-builder"><section className="panel"><div className="panel-title"><div><span className="eyebrow">OPERATION BUILDERS</span><h3>Append, join, aggregate, reshape</h3></div><Settings2/></div><label>Operation<select value={operation} onChange={(event) => { setOperation(event.target.value as CompositionOperation); setPreview(null); setPreviewedPlan(null); }}><option value="append">Append / union</option><option value="join">Exact join</option><option value="aggregate">Group and aggregate</option><option value="pivot">Pivot</option><option value="unpivot">Unpivot</option></select></label><label>Primary canonical field<select value={activeField} onChange={(event) => { setSelectedField(event.target.value); setPreview(null); setPreviewedPlan(null); }}>{fields.map((field) => <option key={field.id} value={field.id}>{field.label} · {field.data_type}</option>)}</select></label><div className="warning-note"><AlertTriangle size={16}/>{operation === "join" ? "Cardinality is analysed before execution; many-to-many requires explicit approval." : operation === "pivot" ? "Generated-column and memory risk are estimated in preview." : "Row-count impact is shown before the background run."}</div><label>Split output by<select value={activeField} onChange={(event) => { setSelectedField(event.target.value); setPreview(null); setPreviewedPlan(null); }}>{fields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</select></label><div className="naming-preview"><span>OUTPUT NAMING PREVIEW</span><code>{project.name.replaceAll(" ", "_")}_{activeField || "split_value"}_{new Date().toISOString().slice(0,10)}.csv</code></div><button className="secondary-button full" onClick={previewPlan}><Play size={16}/>Preview composition</button></section><section className="panel wide"><div className="panel-title"><div><span className="eyebrow">BEFORE / AFTER PREVIEW</span><h3>{preview ? `${preview.input_rows} input → ${preview.output_rows} output rows` : "Run a bounded preview"}</h3></div><GitCompareArrows/></div>{preview ? <><section className="metrics-grid three"><MetricCard icon={Database} label="Output rows" value={preview.output_rows} note={`${preview.rejected_rows} rejected`}/><MetricCard icon={Activity} label="Null impact" value={preview.null_impact} note={`${preview.duplicate_rows} duplicate rows`}/><MetricCard icon={SlidersHorizontal} label="Memory estimate" value={`${Math.ceil(preview.estimated_peak_memory_bytes/1024)} KB`} note={`${preview.generated_columns} output columns`}/></section><DataTable rows={preview.rows} empty="No rows produced by this configuration."/>{preview.join_diagnostics && <div className="warning-note"><AlertTriangle size={16}/>Join diagnostics are ready; review expansion before execution.</div>}</> : <div className="empty-state"><GitCompareArrows/><strong>Preview is required before execution</strong><span>Alignment, row impact, cardinality, and output shape stay inspectable.</span></div>}</section></div>
+      <section className="panel execution-panel"><div className="panel-title"><div><span className="eyebrow">BATCH EXECUTION PROGRESS</span><h3>{job?.current_operation?.replaceAll("_", " ") ?? "Ready for background execution"}</h3></div><StatusChip value={job?.status ?? "ready"}/></div><div className="job-progress-track" aria-label={`${Math.round(job?.progress_percent ?? 0)}% complete`}><span style={{width:`${job?.progress_percent ?? 0}%`}}/></div><div className="panel-footer"><span>{job ? `${job.rows_processed} rows processed · output ${job.output_available ? "available" : "isolated"}` : "Cancellation and safe retry are available while the worker runs."}</span>{job && ["queued","running"].includes(job.status) ? <button className="secondary-button" onClick={() => void api.cancelCompositionJob(job.id).then(setJob)}><X/>Cancel safely</button> : <button className="primary-button" disabled={!previewedPlan} onClick={executePlan}><Play/>Execute full batch</button>}</div></section>
+      <section className="panel"><div className="panel-title"><div><span className="eyebrow">BATCH RESULT MANIFEST</span><h3>{manifest ? `${manifest.outputs.length} fingerprinted artifacts` : "Manifest appears after a successful or partial run"}</h3></div><FileOutput/></div>{manifest ? <><section className="metrics-grid"><MetricCard icon={FileSearch} label="Files accepted" value={manifest.files_accepted} note={`${manifest.files_rejected} rejected`}/><MetricCard icon={Database} label="Rows read" value={manifest.rows_read} note="Across accepted sources"/><MetricCard icon={CheckCircle2} label="Rows output" value={manifest.rows_output} note={`${manifest.rows_rejected} rejected rows`} tone="success"/><MetricCard icon={Fingerprint} label="Artifacts" value={manifest.outputs.length} note="SHA-256 recorded"/></section><div className="source-grid">{manifest.outputs.map((item) => <article key={item.relative_path}><div className="file-icon"><FileOutput/></div><div><strong>{item.relative_path}</strong><span>{item.rows} rows · {(item.size_bytes/1024).toFixed(1)} KB</span><small>{item.sha256.slice(0,20)}…</small></div></article>)}</div></> : <div className="empty-state compact"><FileOutput/><strong>No published batch result</strong><span>Partial and cancelled outputs never appear as successful.</span></div>}</section>
+    </>}
+  </>;
+}
+
+function canonicalCompositionFields(catalog: BatchCatalog | null): CanonicalField[] {
+  return catalog?.items.find((item) => item.processing_eligible)?.discovered_schema ?? [];
+}
+
+function buildCompositionPlan(project: Project, catalog: BatchCatalog | null, operation: CompositionOperation, fieldId: string, planId: string, alignmentOverrides: Record<string, Record<string, string>>): CompositionPlan {
+  if (!catalog) throw new Error("Create a batch catalog first.");
+  const eligible = catalog.items.filter((item) => item.processing_eligible);
+  const fields = canonicalCompositionFields(catalog);
+  const primary = fieldId || fields[0]?.id;
+  const secondary = fields.find((field) => field.id !== primary)?.id ?? primary;
+  const numeric = fields.find((field) => ["integer","decimal"].includes(field.data_type))?.id ?? secondary;
+  if (!primary || !secondary || !numeric) throw new Error("At least one discovered field is required.");
+  if (operation === "join" && eligible.length < 2) throw new Error("Join requires two eligible sources.");
+  if (operation === "unpivot" && fields.length < 2) throw new Error("Unpivot requires an identifier and at least one value field.");
+  const plan: CompositionPlan = {
+    schema_version:"2a.1", id:planId, version:1, project_id:project.id, display_name:`${project.name} composition`,
+    source_ids:eligible.map((item) => item.source_id), discovery_overrides:{header_search_depth:25,preview_rows:25},
+    alignment:{id:crypto.randomUUID(),version:1,canonical_fields:fields,required_missing_policy:"block_batch",extra_field_policy:"ignore",sources:eligible.map((item) => { const mappings = fields.flatMap((field) => { const sourceColumn = alignmentOverrides[item.source_id]?.[field.id] ?? item.discovered_schema.find((candidate) => candidate.id === field.id)?.label; return sourceColumn ? [{source_column:sourceColumn,canonical_field_id:field.id,confidence:alignmentOverrides[item.source_id]?.[field.id] ? .95 : 1,user_confirmed:true,constant_value:null,default_value:null}] : []; }); return {source_id:item.source_id,mapping:{id:crypto.randomUUID(),version:1,canonical_fields:fields,created_by:"local-user",mappings},user_decisions:Object.fromEntries(mappings.map((mapping) => [mapping.canonical_field_id,"accept" as const]))};})},
+    operation,
+    split:{fields:[primary],date_part:"none",mode:"csv_files",naming_template:"{project}_{split_value}_{run_date}",project_label:project.name,report_type:"composition"},
+  };
+  if (operation === "append" || operation === "union") plan.append={output_field_order:fields.map((field) => field.id),duplicate_policy:"keep_all",duplicate_key_fields:[],include_source_lineage:true};
+  if (operation === "join") plan.join={left_source_id:eligible[0]?.source_id,right_source_id:eligible[1]?.source_id,join_type:"inner",left_keys:[primary],right_keys:[primary],key_normalisation:["trim"],null_key_policy:"never_match",duplicate_key_policy:"block_many_to_many",approve_many_to_many:false,output_fields:[],suffix:"_right",unmatched_output_policy:"separate"};
+  if (operation === "aggregate") plan.aggregation={group_fields:[primary],measures:[{field_id:numeric,function:"sum",output_field_id:`${numeric}_sum`,null_handling:"ignore"}],sort_fields:[primary],descending:false,percentage_of_total_fields:[`${numeric}_sum`]};
+  if (operation === "pivot") plan.pivot={row_fields:[primary],column_fields:[secondary],value_field:numeric,aggregation:"sum",sort_columns:true,maximum_generated_columns:250};
+  if (operation === "unpivot") plan.unpivot={identifier_fields:[primary],value_fields:fields.filter((field) => field.id !== primary).map((field) => field.id),variable_field_name:"variable",value_field_name:"value",null_row_handling:"drop"};
+  return plan;
+}
+
 function HistoryScreen({ runs }: { runs: RunRecord[] }) {
   return <><ScreenHead eyebrow="RUN AUDIT" title="Every execution has a history." description="Statuses, fingerprints, counts, duration, and artifact locations remain traceable without storing source rows in the database." step="9 of 9"/><section className="panel"><div className="panel-title"><div><span className="eyebrow">LOCAL RUNS</span><h3>{runs.length} recorded executions</h3></div><History/></div>{runs.length ? <div className="history-table">{runs.map((run) => <article key={run.id}><div className="file-icon"><FileOutput/></div><div><strong>{run.source_filename}</strong><span>{new Date(run.started_at).toLocaleString()} · {run.duration_ms} ms</span></div><span>{run.rows_read} read</span><span>{run.rows_written} written</span><span>{run.rows_rejected} rejected</span><StatusChip value={run.status}/><a className="icon-button" href={api.artifactUrl(run.id)} aria-label={`Download output for ${run.source_filename}`}><Download size={17}/></a></article>)}</div> : <div className="empty-state"><History/><strong>No runs recorded</strong><span>Complete the guided workflow to create the first audit record.</span></div>}</section></>;
 }
@@ -352,7 +487,7 @@ function buildWorkflow(project: Project, source: SourceHandle, table: TableDisco
     { id: "TYPE_1", rule_type: "data_type", field_id: requiredField, severity: "warning", reason_code: "DATA_TYPE_INVALID", message: `${requiredField} does not match its canonical type`, config: { data_type: canonical_fields.find((field) => field.id===requiredField)?.data_type ?? "text" } },
     { id: "LENGTH_1", rule_type: "text_length", field_id: textField, severity: "warning", reason_code: "TEXT_LENGTH_INVALID", message: `${textField} exceeds the configured length`, config: { min: 0, max: 120 } },
   ];
-  return { schema_version:"1.1", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_rows:table.selected_header_rows, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, calculations:[], validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
+  return { schema_version:"1.2", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_rows:table.selected_header_rows, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, calculations:[], composition_plan_id:null, composition_plan_version:null, validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
 }
 
 function messageOf(reason: unknown) { return reason instanceof Error ? reason.message.replace(/^\{"detail":"?|"?\}$/g, "") : "Unexpected local error"; }

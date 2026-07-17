@@ -1,6 +1,6 @@
 # DataPilot Studio
 
-DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 1B adds bounded multi-table and multi-row-header discovery, explicit schema-drift review and mapping repair, a closed typed expression tree, persistent background execution with cancellation/checkpoints, migration safety, support bundles, semantic golden workbooks, and five anonymised demonstration profiles.
+DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 2A adds multi-file/folder catalogs, versioned canonical alignment, append/union, exact joins with cardinality gates, grouped aggregation, pivot/unpivot, dynamic split outputs, deterministic evidence packages, and a background-enabled Composition Studio.
 
 The source of truth is `docs/product/DataPilot_Studio_Commercial_PRD_v1.0.pdf`. Milestone scope and requirement status are recorded in `docs/planning/PRD_TRACEABILITY_MATRIX.md`.
 
@@ -18,6 +18,7 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 npm install
 python scripts/generate_fixtures.py
+python scripts/generate_composition_fixtures.py
 ```
 
 Start the API and web app in separate terminals:
@@ -51,6 +52,7 @@ python scripts/generate_demo_profiles.py
 python scripts/generate_golden_workbook.py
 python scripts/benchmark_m1b.py
 python scripts/benchmark_export.py
+python scripts/benchmark_m2a.py
 ```
 
 ## Runtime safety
@@ -59,4 +61,4 @@ Runtime uploads, projects, run folders, outputs, and SQLite metadata are created
 
 ## Scope
 
-Implemented work covers Milestones 0, 1A, and 1B. Append/join/pivot, full multi-source reconciliation, schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.
+Implemented work covers Milestones 0, 1A, 1B, and 2A. Fuzzy/staged reconciliation, dataset comparison, schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.

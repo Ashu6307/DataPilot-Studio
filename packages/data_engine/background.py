@@ -33,12 +33,20 @@ class JobStore(Protocol):
     def recover_orphans(self) -> list[BackgroundJobRecord]: ...
 
 
+class JobControlStore(Protocol):
+    def get(self, job_id: UUID) -> BackgroundJobRecord | None: ...
+    def update(self, job: BackgroundJobRecord) -> BackgroundJobRecord: ...
+    def append_event(self, event: JobProgressEvent) -> JobProgressEvent: ...
+    def events(self, job_id: UUID) -> list[JobProgressEvent]: ...
+    def save_checkpoint(self, checkpoint: CheckpointRecord) -> CheckpointRecord: ...
+
+
 class BackgroundJobCancelled(RuntimeError):
     pass
 
 
 class JobControl:
-    def __init__(self, store: JobStore, job_id: UUID) -> None:
+    def __init__(self, store: JobControlStore, job_id: UUID) -> None:
         self.store = store
         self.job_id = job_id
 

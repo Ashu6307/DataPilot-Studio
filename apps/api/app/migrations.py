@@ -62,6 +62,30 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_job ON checkpoints(job_id, created_at
 CREATE INDEX IF NOT EXISTS idx_mapping_decisions_workflow ON mapping_decisions(workflow_id, created_at);
 """
 
+M2A_COMPOSITION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS composition_plans (
+    id TEXT NOT NULL, version INTEGER NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id),
+    display_name TEXT NOT NULL, configuration_json TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (id, version)
+);
+CREATE TABLE IF NOT EXISTS alignment_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id TEXT NOT NULL, plan_version INTEGER NOT NULL,
+    source_id TEXT NOT NULL, decision_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS batch_manifests (
+    run_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+    plan_id TEXT NOT NULL, plan_version INTEGER NOT NULL, manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS folder_scan_history (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+    configuration_json TEXT NOT NULL, catalog_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_composition_plans_project ON composition_plans(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_alignment_decisions_plan ON alignment_decisions(plan_id, plan_version, created_at);
+CREATE INDEX IF NOT EXISTS idx_batch_manifests_project ON batch_manifests(project_id, created_at);
+"""
+
 VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL
@@ -83,6 +107,7 @@ class Migration:
 MIGRATIONS = (
     Migration(1, "milestone_1a_metadata", M1A_SCHEMA),
     Migration(2, "milestone_1b_jobs_checkpoints_mapping_history", M1B_JOB_SCHEMA),
+    Migration(3, "milestone_2a_composition_metadata", M2A_COMPOSITION_SCHEMA),
 )
 
 
@@ -166,9 +191,7 @@ class SQLiteMigrationManager:
                     f"{self._sql_literal(migration.checksum)}, {self._sql_literal(applied_at)});"
                 )
                 try:
-                    connection.executescript(
-                        f"BEGIN IMMEDIATE;\n{migration.sql}\n{record_sql}\nCOMMIT;"
-                    )
+                    connection.executescript(f"BEGIN IMMEDIATE;\n{migration.sql}\n{record_sql}\nCOMMIT;")
                     steps.append(
                         MigrationStepResult(
                             version=migration.version,
@@ -179,9 +202,7 @@ class SQLiteMigrationManager:
                     )
                 except sqlite3.Error as error:
                     connection.rollback()
-                    raise MigrationError(
-                        f"DATABASE_MIGRATION_FAILED: {migration.version}:{migration.name}"
-                    ) from error
+                    raise MigrationError(f"DATABASE_MIGRATION_FAILED: {migration.version}:{migration.name}") from error
             final_row = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
             final_version = int(final_row[0] or 0)
             return DatabaseMigrationReport(

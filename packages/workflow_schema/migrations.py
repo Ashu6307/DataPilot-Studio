@@ -17,16 +17,19 @@ class WorkflowMigrationError(ValueError):
 
 
 def migrate_workflow_payload(
-    payload: dict[str, Any], target_version: str = "1.1"
+    payload: dict[str, Any], target_version: str = "1.2"
 ) -> tuple[dict[str, Any], WorkflowMigrationReport]:
     migrated = deepcopy(payload)
     source_version = str(migrated.get("schema_version", "1.0"))
-    if source_version not in {"1.0", "1.1"}:
+    original_version = source_version
+    if source_version not in {"1.0", "1.1", "1.2"}:
         raise WorkflowMigrationError(
-            f"WORKFLOW_VERSION_UNSUPPORTED: {source_version}; supported versions are 1.0 and 1.1"
+            f"WORKFLOW_VERSION_UNSUPPORTED: {source_version}; supported versions are 1.0, 1.1 and 1.2"
         )
-    if target_version != "1.1":
+    if target_version not in {"1.1", "1.2"}:
         raise WorkflowMigrationError(f"WORKFLOW_MIGRATION_TARGET_UNSUPPORTED: {target_version}")
+    if source_version == "1.2" and target_version != "1.2":
+        raise WorkflowMigrationError("WORKFLOW_DOWNGRADE_NOT_SUPPORTED")
     changed: list[str] = []
     if source_version == "1.0":
         migrated["schema_version"] = "1.1"
@@ -46,9 +49,19 @@ def migrate_workflow_payload(
         if "calculations" not in migrated:
             migrated["calculations"] = []
             changed.append("calculations")
+        source_version = "1.1"
+    if source_version == "1.1" and target_version == "1.2":
+        migrated["schema_version"] = "1.2"
+        changed.append("schema_version")
+        if "composition_plan_id" not in migrated:
+            migrated["composition_plan_id"] = None
+            changed.append("composition_plan_id")
+        if "composition_plan_version" not in migrated:
+            migrated["composition_plan_version"] = None
+            changed.append("composition_plan_version")
     WorkflowConfiguration.model_validate(migrated)
     return migrated, WorkflowMigrationReport(
-        from_version=source_version,
+        from_version=original_version,
         to_version=target_version,
         changed_paths=changed,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import tempfile
 from pathlib import Path
@@ -9,9 +10,16 @@ from typing import BinaryIO
 from uuid import UUID
 
 from packages.contracts import (
+    BatchCatalog,
+    BatchCatalogRequest,
     CheckpointRecord,
+    CompositionJobSubmission,
+    CompositionPlan,
+    CompositionPreview,
+    CompositionPreviewRequest,
     DiscoveryOverrides,
     DiscoveryResult,
+    FolderScanRequest,
     JobSubmission,
     PreviewRequest,
     PreviewResult,
@@ -31,6 +39,9 @@ from packages.data_engine import (
     discover_source,
 )
 from packages.data_engine.background import workflow_hash
+from packages.data_engine.composition_background import composition_hash
+from packages.data_engine.composition_runtime import CompositionRuntime
+from packages.data_engine.multi_source import build_batch_catalog, scan_folder_paths
 from packages.workflow_schema import assert_secret_free
 
 from .repositories import MetadataRepository
@@ -41,13 +52,12 @@ class DataPilotService:
         self.repository = repository
         self.workspace = workspace
         self.runtime = EngineRuntime(workspace)
+        self.composition_runtime = CompositionRuntime(workspace)
 
     def create_project(self, request: ProjectCreate) -> Project:
         return self.repository.create_project(Project(**request.model_dump()))
 
-    def import_source(
-        self, project_id: UUID, filename: str, media_type: str, stream: BinaryIO
-    ) -> SourceHandle:
+    def import_source(self, project_id: UUID, filename: str, media_type: str, stream: BinaryIO) -> SourceHandle:
         temp_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as temporary:
@@ -134,6 +144,115 @@ class DataPilotService:
                 workflow_hash=workflow_hash(submission),
                 source_fingerprint=source.sha256,
                 completed_stage="engine_completed",
+                rows_processed=result.record.rows_read,
+                artifact_path=result.record.artifacts[-1] if result.record.artifacts else None,
+                resumable=False,
+            )
+        )
+        return result.record
+
+    def batch_catalog(self, request: BatchCatalogRequest) -> BatchCatalog:
+        sources = [self._source(source_id) for source_id in request.source_ids]
+        return build_batch_catalog(
+            request.project_id,
+            [(handle, source) for handle, source in sources],
+            request.discovery_overrides,
+            request.table_strategy,
+            set(request.previous_fingerprints),
+            explicit_table_ids=request.explicit_table_ids,
+        )
+
+    def scan_folder(self, request: FolderScanRequest) -> BatchCatalog:
+        candidates = scan_folder_paths(request.configuration)
+        imported: list[tuple[SourceHandle, SourceFile]] = []
+        relative_paths: dict[UUID, str] = {}
+        for candidate in candidates:
+            with candidate.path.open("rb") as stream:
+                handle = self.import_source(
+                    request.project_id,
+                    candidate.relative_path,
+                    "text/csv" if candidate.path.suffix.casefold() == ".csv" else "application/vnd.ms-excel",
+                    stream,
+                )
+            _, source = self._source(handle.id)
+            imported.append((handle, source))
+            relative_paths[handle.id] = candidate.relative_path
+        catalog = build_batch_catalog(
+            request.project_id,
+            imported,
+            request.discovery_overrides,
+            request.configuration.table_strategy,
+            set(request.configuration.previous_fingerprints),
+            relative_paths,
+            {
+                source_id: request.configuration.explicit_table_ids[relative_path]
+                for source_id, relative_path in relative_paths.items()
+                if relative_path in request.configuration.explicit_table_ids
+            },
+        )
+        return self.repository.save_folder_catalog(catalog, request.configuration.model_dump_json())
+
+    def save_composition_plan(self, plan: CompositionPlan) -> CompositionPlan:
+        assert_secret_free(plan.model_dump(mode="json"))
+        return self.repository.save_composition_plan(plan)
+
+    def preview_composition(self, request: CompositionPreviewRequest) -> CompositionPreview:
+        explicit_tables = {
+            source.source_id: source.table_id
+            for source in request.plan.alignment.sources
+            if source.table_id is not None
+        }
+        catalog_request = BatchCatalogRequest(
+            project_id=request.plan.project_id,
+            source_ids=request.plan.source_ids,
+            discovery_overrides=request.plan.discovery_overrides,
+            explicit_table_ids=explicit_tables,
+        )
+        catalog = self.batch_catalog(catalog_request)
+        sources = {source_id: self._source(source_id) for source_id in request.plan.source_ids}
+        return self.composition_runtime.preview(request.plan, catalog, sources, request.row_limit)
+
+    def run_composition_background(self, submission: CompositionJobSubmission, control: JobControl) -> RunRecord:
+        plan = submission.run.plan
+        explicit_tables = {
+            source.source_id: source.table_id
+            for source in plan.alignment.sources
+            if source.table_id is not None
+        }
+        catalog = self.batch_catalog(
+            BatchCatalogRequest(
+                project_id=plan.project_id,
+                source_ids=plan.source_ids,
+                discovery_overrides=plan.discovery_overrides,
+                explicit_table_ids=explicit_tables,
+            )
+        )
+        combined_fingerprint = hashlib.sha256(
+            "".join(sorted(item.fingerprint for item in catalog.items)).encode("utf-8")
+        ).hexdigest()
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=plan.id,
+                workflow_version=plan.version,
+                workflow_hash=composition_hash(submission),
+                source_fingerprint=combined_fingerprint,
+                completed_stage="composition_catalogued",
+                resumable=True,
+            )
+        )
+        sources = {source_id: self._source(source_id) for source_id in plan.source_ids}
+        result = self.composition_runtime.execute(plan, catalog, sources, control)
+        self.repository.save_run(result.record)
+        self.repository.save_batch_manifest(plan.project_id, result.manifest)
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=plan.id,
+                workflow_version=plan.version,
+                workflow_hash=composition_hash(submission),
+                source_fingerprint=combined_fingerprint,
+                completed_stage="composition_completed",
                 rows_processed=result.record.rows_read,
                 artifact_path=result.record.artifacts[-1] if result.record.artifacts else None,
                 resumable=False,

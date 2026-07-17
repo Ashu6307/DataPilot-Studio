@@ -1,6 +1,6 @@
 # PRD Traceability Matrix
 
-Status values: **Implemented** (code plus passing test), **Partial**, **Planned M1B**, **Deferred**, **Documentation only**.
+Status values: **Implemented** (code plus passing test), **Partial**, **Deferred**, **Documentation only**.
 
 | PRD section | Requirement ID | Requirement summary | Module | Milestone | Status | Related test | Notes/dependencies |
 |---|---|---|---|---|---|---|---|
@@ -15,12 +15,12 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Planned 
 | 8 | FR-8-07 | Credential references, no plaintext secrets | Contracts/security | M0 | Implemented | `test_workflow_schema.py` | Rejection scanner; vault deferred |
 | 9 | FR-9-01 | Excel ingestion with sheet/table selection | Connector | M1 | Implemented | `test_discovery.py`, `test_api.py` | XLSX/XLSM read only |
 | 9 | FR-9-02 | CSV/TSV/TXT/JSON/Parquet ingestion | Connector | M1/M2 | Partial | `test_discovery.py` | CSV now; others deferred |
-| 9 | FR-9-03 | Folder/ZIP batch ingestion | Connector | M2 | Deferred | future batch tests | Not in slice |
+| 9 | FR-9-03 | Folder/ZIP batch ingestion | Connector | M2A | Implemented | `test_batch_ingestion_alignment.py`, `test_composition_vertical_slice.py` | Recursive scan, patterns, catalog and deterministic derived ZIP |
 | 9 | FR-9-04 | Parameterised database connector | Connector | M3 | Deferred | future connector contract tests | DuckDB internal adapter only |
 | 9 | FR-9-05 | REST/pagination/auth-ref connector | Connector | M3 | Deferred | future API connector tests | No remote data |
 | 9 | FR-9-06 | PDF/OCR connector | Connector | M4+ | Deferred | future PDF corpus | Unsupported initially |
 | 9 | FR-9-07 | Preview/discovery/estimates/samples | Connector/discovery | M1 | Implemented | `test_discovery.py` | Bounded samples |
-| 9 | FR-9-08 | Incremental ingestion | Connector | M2 | Deferred | future cursor tests | Fingerprints foundation only |
+| 9 | FR-9-08 | Incremental ingestion | Connector | M2A | Implemented | `test_batch_ingestion_alignment.py` | Prior fingerprint baseline marks unchanged sources |
 | 10 | FR-10-01 | Sheets, visibility, candidate regions | Discovery | M1 | Implemented | `test_discovery.py` | One primary region per sheet |
 | 10 | FR-10-02 | Single/multi-row header confidence | Discovery | M1/M1B | Implemented | `test_discovery.py`, `test_discovery_hardening.py` | One-to-three-level flattening, merged cells, evidence, and overrides |
 | 10 | FR-10-03 | Repeated headers and footer/totals | Discovery/cleaning | M1 | Implemented | `test_operations.py` | Footer is warning heuristic |
@@ -45,13 +45,13 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Planned 
 | 12 | FR-12-07 | Remove rows/blanks/columns/repeated headers | Operations | M1 | Implemented | `test_operations.py` | Select fields covers columns |
 | 12 | FR-12-08 | Optional original-value lineage | Lineage | M1B | Implemented | `test_expressions.py` | Calculation preview exposes bounded before/after lineage when enabled |
 | 13 | FR-13-01 | Filter/sort/select/rename/reorder | Operations | M1/M2 | Partial | `test_operations.py` | Select/rename/reorder now |
-| 13 | FR-13-02 | Append mapped tables | Operations | M2 | Deferred | future append tests | Not in slice |
-| 13 | FR-13-03 | Join tables safely | Operations | M2 | Deferred | future join tests | Not in slice |
-| 13 | FR-13-04 | Group/aggregate/rank/running metrics | Operations | M1B/M2 | Partial | `test_operations.py`, `test_demo_profiles.py` | Generic group aggregate implemented; rank/running metrics remain M2 |
-| 13 | FR-13-05 | Pivot/unpivot | Operations | M2 | Deferred | future reshape tests | Not in slice |
+| 13 | FR-13-02 | Append mapped tables | Operations | M2A | Implemented | `test_composition_operations.py`, `test_composition_vertical_slice.py` | Heterogeneous aligned append with lineage and duplicate policy |
+| 13 | FR-13-03 | Join tables safely | Operations | M2A | Implemented | `test_composition_operations.py` | Six exact joins, multi-key config, cardinality gate, unmatched evidence |
+| 13 | FR-13-04 | Group/aggregate/rank/running metrics | Operations | M1B/M2A | Implemented | `test_composition_operations.py` | Nine functions, multiple measures, percent, rank, deterministic running total |
+| 13 | FR-13-05 | Pivot/unpivot | Operations | M2A | Implemented | `test_composition_operations.py` | Width gate, aggregation/fill and null-row policy |
 | 13 | FR-13-06 | Window/date/ageing/conditional fields | Operations | M1B/M2 | Partial | `test_expressions.py`, `test_demo_profiles.py` | Date difference and conditional fields implemented; windows remain M2 |
 | 13 | FR-13-07 | Explode/aggregate multi-value cells | Operations | M2 | Deferred | future structure tests | Not in slice |
-| 13 | FR-13-08 | Heterogeneous union with lineage | Operations | M2 | Deferred | future union tests | Not in slice |
+| 13 | FR-13-08 | Heterogeneous union with lineage | Operations | M2A | Implemented | `test_composition_operations.py`, `test_composition_vertical_slice.py` | Canonical schema plus source/file/table/row lineage |
 | 14 | FR-14-01..07 | Condition builder, typed calculations, reusable/versioned rules, evaluator/tests | Rule engine | M1/M2 | Partial | `test_validators.py`, `test_expressions.py`, Playwright | Closed typed evaluator and calculation builder implemented; full visual condition authoring remains M2 |
 | 15 | FR-15-01 | Required/unique/range/pattern/allowed checks | Validation | M1 | Implemented | `test_validators.py` | All included |
 | 15 | FR-15-02 | Cross-field conditional validation | Validation | M2 | Deferred | future rule tests | Not in slice |
@@ -71,10 +71,10 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Planned 
 | 21 | FR-21-03 | Branded template packs | Report | M2 | Deferred | future golden tests | Base theme only |
 | 21 | FR-21-04 | Pivot summaries and KPI cards | Report | M2 | Deferred | future report tests | Counts summary only |
 | 21 | FR-21-05 | Interactive dashboards | Reports/UI | M4+ | Deferred | future dashboard E2E | Not in slice |
-| 21 | FR-21-06 | CSV/Parquet/JSON/API outputs | Export | M2 | Deferred | future exporter tests | Excel only in slice |
+| 21 | FR-21-06 | CSV/Parquet/JSON/API outputs | Export | M2A | Partial | `test_split_and_batch_export.py` | CSV/JSON evidence and API manifests implemented; Parquet deferred |
 | 21 | FR-21-07 | Publication checks | Runtime/export | M1 | Implemented | `test_vertical_slice.py` | Reopen and reconcile |
 | 22 | FR-22-01..07 | Governed AI mapping/workflow/explanations/summaries | AI | M6 | Deferred | future AI guardrail tests | Remote AI prohibited now |
-| 23 | FR-23-01..07 | Safe file naming/routing/hash/package/retention/watcher | File automation | M3 | Deferred | future filesystem tests | Hash/name safety foundation only |
+| 23 | FR-23-01..07 | Safe file naming/routing/hash/package/retention/watcher | File automation | M2A/M3 | Partial | `test_split_and_batch_export.py` | Safe names, routing, hash and package implemented; retention/watcher deferred |
 | 24 | FR-24-01..07 | Signed licensing, seats, grace, features, transfer/admin/trial | Licensing | M4 | Deferred | capability/entitlement contract tests | Provider-neutral interface only |
 | 25 | FR-25-01 | Plugin manifest | Plugin SDK | M0 | Implemented | `test_plugin_contracts.py` | Schema only |
 | 25 | FR-25-02 | Connector/processor/validator/exporter/UI contracts | Plugin SDK | M0 | Implemented | `test_plugin_contracts.py` | No UI extension runtime |
@@ -92,7 +92,7 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Planned 
 | 37 | US-011..024 | P1 profiles/drift/advanced ops/reports/visual workflow/support | Core/advanced | M1/M2/M3 | Partial | per-module future suites | Save profile now; remainder staged |
 | 37 | US-025..035 | P2 scheduler/connectors/dashboard/team/license/update/AI | Later platform | M3-M6 | Deferred | future phase tests | Explicit deferral |
 | 37 | US-036..040 | P3 plugins/marketplace/cloud/SSO/audit ledger | Ecosystem | M6 | Deferred | future enterprise tests | Explicit deferral |
-| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | `test_vertical_slice.py`, Playwright | Initial slice passes; deferred modules retain their criteria |
+| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | `test_vertical_slice.py`, `test_composition_vertical_slice.py`, Playwright | M2A adds dynamic composition safety/audit; deferred modules retain criteria |
 | 39-42 | PRD-KICKOFF-01 | Reference workflows, sequence, fixtures, API, review gates | Delivery | M0/M1B | Implemented | all current suites | Five anonymised profiles, dynamic fixtures, API, UI, and release gates covered |
 
 ## Review rule

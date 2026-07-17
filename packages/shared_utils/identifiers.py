@@ -12,4 +12,3 @@ def slugify_field(label: str, fallback: str = "field") -> str:
     if value[0].isdigit():
         value = f"field_{value}"
     return value[:80]
-

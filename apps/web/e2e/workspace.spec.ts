@@ -60,3 +60,26 @@ test("reuses a saved workflow after explicit schema-drift repair", async ({ requ
   expect(repairResponse.ok()).toBeTruthy();
   expect((await repairResponse.json()).mapping.version).toBe(2);
 });
+
+test("composes multiple files through preview, background execution, and manifest", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Project name").fill("M2A composition proof");
+  await page.getByRole("button", { name: "Create local project" }).click();
+  await page.getByRole("button", { name: /Composition studio/i }).click();
+  await expect(page.getByRole("heading", { name: /Compose changing datasets/i })).toBeVisible();
+  const first = path.resolve(process.cwd(), "../../tests/fixtures/composition/same_schema_a.csv");
+  const second = path.resolve(process.cwd(), "../../tests/fixtures/composition/renamed_columns.csv");
+  await page.getByLabel(/Choose multiple Excel or CSV files/i).setInputFiles([first, second]);
+  const catalog = page.locator(".composition-catalog");
+  await expect(catalog.getByText("same_schema_a.csv", { exact: true })).toBeVisible();
+  await expect(catalog.getByText("renamed_columns.csv", { exact: true })).toBeVisible();
+  await page.getByLabel("Map employee_id for renamed_columns.csv").selectOption("emp_code");
+  await page.getByLabel("Map department for renamed_columns.csv").selectOption("dept");
+  await page.getByLabel("Map amount for renamed_columns.csv").selectOption("net_value");
+  await page.getByRole("button", { name: /Preview composition/i }).click();
+  await expect(page.getByText(/2 input → 2 output rows/i)).toBeVisible();
+  await page.getByRole("button", { name: /Execute full batch/i }).click();
+  await expect(page.getByText(/fingerprinted artifacts/i)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("processed-output.csv")).toBeVisible();
+  await expect(page.getByText("rejected-files.json")).toBeVisible();
+});

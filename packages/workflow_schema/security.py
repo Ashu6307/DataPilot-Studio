@@ -22,4 +22,3 @@ def assert_secret_free(value: Any, path: str = "workflow") -> None:
             assert_secret_free(child, f"{path}[{index}]")
     elif isinstance(value, str) and SECRET_VALUE.search(value):
         raise ValueError(f"secret-like value is forbidden at {path}")
-

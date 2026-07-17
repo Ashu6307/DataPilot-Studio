@@ -12,9 +12,16 @@ Project/source APIs, Excel/CSV discovery, overrideable header selection, column 
 
 Background execution/cancellation, stronger table-region and multi-row-header discovery, schema drift compare/repair, calculation/group operations, checkpoints, golden workbooks, measured 10k/100k/500k budgets, support bundles, workflow/database migrations, and five structurally distinct demonstration profiles are implemented. Tauri packaging remains a later commercialisation concern and was not claimed in this hardening milestone.
 
-## Milestone 2 — Advanced operations
+## Milestone 2A — Dynamic data composition (complete, 2026-07-17)
 
-Append/join/pivot, referential integrity, dataset comparison, staged reconciliation, review queues, and report templates.
+Multi-source/folder ingestion, versioned canonical alignment, append/union, exact
+joins with cardinality gates, grouped aggregation, pivot/unpivot, dynamic split,
+derived-only evidence packages, background execution, and Composition Studio UI.
+
+## Milestone 2B — Reconciliation and comparison
+
+Referential integrity, key-based dataset comparison, staged exact/tolerance/fuzzy
+reconciliation, review queues, and report templates.
 
 ## Milestone 3 — Workflow platform
 

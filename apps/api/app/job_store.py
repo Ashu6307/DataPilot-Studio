@@ -42,8 +42,14 @@ class SQLiteJobStore:
 
     def get(self, job_id: UUID) -> BackgroundJobRecord | None:
         with self.database.connect() as connection:
-            row = connection.execute("SELECT record_json FROM jobs WHERE id = ?", (str(job_id),)).fetchone()
-        return BackgroundJobRecord.model_validate_json(row["record_json"]) if row else None
+            row = connection.execute(
+                "SELECT record_json, status, cancel_requested FROM jobs WHERE id = ?", (str(job_id),)
+            ).fetchone()
+        if row is None:
+            return None
+        return BackgroundJobRecord.model_validate_json(row["record_json"]).model_copy(
+            update={"status": RunStatus(row["status"]), "cancel_requested": bool(row["cancel_requested"])}
+        )
 
     def submission(self, job_id: UUID) -> JobSubmission | None:
         with self.database.connect() as connection:
@@ -54,11 +60,18 @@ class SQLiteJobStore:
         with self.database.connect() as connection:
             changed = connection.execute(
                 """
-                UPDATE jobs SET run_id = ?, status = ?, record_json = ?, cancel_requested = ?,
+                UPDATE jobs SET run_id = ?,
+                    status = CASE
+                        WHEN cancel_requested = 1 AND ? NOT IN ('cancelled', 'failed') THEN 'cancelling'
+                        ELSE ?
+                    END,
+                    record_json = ?,
+                    cancel_requested = CASE WHEN cancel_requested = 1 THEN 1 ELSE ? END,
                     updated_at = ? WHERE id = ?
                 """,
                 (
                     str(job.run_id) if job.run_id else None,
+                    job.status,
                     job.status,
                     job.model_dump_json(),
                     int(job.cancel_requested),
@@ -68,10 +81,13 @@ class SQLiteJobStore:
             ).rowcount
         if changed != 1:
             raise KeyError("JOB_NOT_FOUND")
-        return job
+        persisted = self.get(job.id)
+        if persisted is None:
+            raise KeyError("JOB_NOT_FOUND")
+        return persisted
 
     def list_jobs(self, project_id: UUID | None = None) -> list[BackgroundJobRecord]:
-        query = "SELECT record_json FROM jobs"
+        query = "SELECT record_json, status, cancel_requested FROM jobs"
         parameters: tuple[str, ...] = ()
         if project_id is not None:
             query += " WHERE project_id = ?"
@@ -79,7 +95,12 @@ class SQLiteJobStore:
         query += " ORDER BY created_at DESC"
         with self.database.connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
-        return [BackgroundJobRecord.model_validate_json(row["record_json"]) for row in rows]
+        return [
+            BackgroundJobRecord.model_validate_json(row["record_json"]).model_copy(
+                update={"status": RunStatus(row["status"]), "cancel_requested": bool(row["cancel_requested"])}
+            )
+            for row in rows
+        ]
 
     def append_event(self, event: JobProgressEvent) -> JobProgressEvent:
         with self.database.connect() as connection:

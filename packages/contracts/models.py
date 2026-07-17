@@ -459,7 +459,7 @@ class ExportConfiguration(StrictModel):
 
 
 class WorkflowConfiguration(StrictModel):
-    schema_version: Literal["1.0", "1.1"] = "1.1"
+    schema_version: Literal["1.0", "1.1", "1.2"] = "1.2"
     compatibility_version: Literal[1] = 1
     id: UUID = Field(default_factory=uuid4)
     workflow_version: int = Field(default=1, ge=1)
@@ -470,6 +470,8 @@ class WorkflowConfiguration(StrictModel):
     mapping: MappingSet
     operations: list[OperationNode] = Field(default_factory=list)
     calculations: list[CalculatedFieldConfiguration] = Field(default_factory=list)
+    composition_plan_id: UUID | None = None
+    composition_plan_version: int | None = Field(default=None, ge=1)
     validation_rules: list[ValidationRule] = Field(default_factory=list)
     export: ExportConfiguration = Field(default_factory=ExportConfiguration)
     created_at: datetime = Field(default_factory=utc_now)

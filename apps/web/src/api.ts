@@ -1,6 +1,6 @@
 import type {
-  BackgroundJob, DiscoveryResult, PreviewResult, Project, RunRecord, SchemaDriftResult,
-  SourceHandle, TableDiscovery, Workflow,
+  BackgroundJob, BatchCatalog, BatchManifest, CompositionPlan, CompositionPreview, DiscoveryResult,
+  PreviewResult, Project, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery, Workflow,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -28,6 +28,31 @@ export const api = {
     body.append("file", file);
     return request<SourceHandle>("/sources", { method: "POST", body });
   },
+  catalogBatch: (projectId: string, sourceIds: string[]) =>
+    request<BatchCatalog>("/batches/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, source_ids: sourceIds }),
+    }),
+  scanFolder: (projectId: string, rootPath: string, recursive: boolean, includePatterns: string[], excludePatterns: string[]) =>
+    request<BatchCatalog>("/folders/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, configuration: {
+        root_path: rootPath, recursive, include_patterns: includePatterns, exclude_patterns: excludePatterns,
+      } }),
+    }),
+  previewComposition: (plan: CompositionPlan) =>
+    request<CompositionPreview>("/compositions/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, row_limit: 50 }),
+    }),
+  submitComposition: (plan: CompositionPlan) =>
+    request<BackgroundJob>("/composition-jobs", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, idempotency_key: crypto.randomUUID() }),
+    }),
+  getCompositionJob: (jobId: string) => request<BackgroundJob>(`/composition-jobs/${jobId}`),
+  cancelCompositionJob: (jobId: string) => request<BackgroundJob>(`/composition-jobs/${jobId}/cancel`, { method: "POST" }),
+  getBatchManifest: (runId: string) => request<BatchManifest>(`/batch-manifests/${runId}`),
   discover: (sourceId: string, sheetName: string | null = null, headerRow: number | null = null) =>
     request<DiscoveryResult>(`/sources/${sourceId}/discover`, {
       method: "POST",

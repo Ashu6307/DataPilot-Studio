@@ -141,7 +141,7 @@ export interface ValidationRule {
 }
 
 export interface Workflow {
-  schema_version: "1.0" | "1.1";
+  schema_version: "1.0" | "1.1" | "1.2";
   compatibility_version: 1;
   id: string;
   workflow_version: number;
@@ -159,6 +159,8 @@ export interface Workflow {
   };
   operations: OperationNode[];
   calculations: CalculatedField[];
+  composition_plan_id?: string | null;
+  composition_plan_version?: number | null;
   validation_rules: ValidationRule[];
   export: { filename_prefix: string; include_summary: boolean; include_rejected_rows: boolean; include_source_metadata: boolean };
   created_at: string;
@@ -247,4 +249,100 @@ export interface RunRecord {
   errors: string[];
   artifacts: string[];
   duration_ms: number;
+}
+
+export interface BatchSourceItem {
+  source_id: string;
+  filename: string;
+  relative_path: string;
+  fingerprint: string;
+  file_type: "csv" | "xlsx" | "xlsm";
+  table_id: string | null;
+  discovered_schema: CanonicalField[];
+  row_estimate: number;
+  warnings: string[];
+  state: "eligible" | "duplicate" | "unchanged" | "quarantined" | "unsupported" | "failed";
+  processing_eligible: boolean;
+}
+
+export interface BatchCatalog {
+  id: string;
+  project_id: string;
+  items: BatchSourceItem[];
+  files_considered: number;
+  files_eligible: number;
+  files_duplicate: number;
+  files_unchanged: number;
+  files_quarantined: number;
+  total_row_estimate: number;
+  warnings: string[];
+}
+
+export type CompositionOperation = "append" | "union" | "join" | "aggregate" | "pivot" | "unpivot";
+
+export interface CompositionPlan {
+  schema_version: "2a.1";
+  id: string;
+  version: number;
+  project_id: string;
+  display_name: string;
+  source_ids: string[];
+  discovery_overrides: { header_search_depth: number; preview_rows: number };
+  alignment: {
+    id: string;
+    version: number;
+    canonical_fields: CanonicalField[];
+    sources: Array<{
+      source_id: string;
+      mapping: {
+        id: string;
+        version: number;
+        canonical_fields: CanonicalField[];
+        mappings: ColumnMapping[];
+        created_by: string;
+      };
+      user_decisions: Record<string, "accept" | "reject" | "manual">;
+    }>;
+    required_missing_policy: "reject_file" | "quarantine_file" | "block_batch" | "allow_approved_value";
+    extra_field_policy: "ignore" | "include" | "block";
+  };
+  operation: CompositionOperation;
+  append?: { output_field_order: string[]; duplicate_policy: string; duplicate_key_fields: string[]; include_source_lineage: boolean };
+  join?: Record<string, unknown>;
+  aggregation?: Record<string, unknown>;
+  pivot?: Record<string, unknown>;
+  unpivot?: Record<string, unknown>;
+  split?: Record<string, unknown>;
+}
+
+export interface CompositionPreview {
+  operation: CompositionOperation;
+  rows: Record<string, unknown>[];
+  alignment: { blocked: boolean; cells: Array<Record<string, unknown>>; warnings: string[] };
+  input_rows: number;
+  output_rows: number;
+  rejected_rows: number;
+  duplicate_rows: number;
+  group_count: number;
+  null_impact: number;
+  estimated_peak_memory_bytes: number;
+  generated_columns: number;
+  join_diagnostics: Record<string, unknown> | null;
+  warnings: string[];
+}
+
+export interface BatchManifest {
+  run_id: string;
+  plan_id: string;
+  plan_version: number;
+  status: RunRecord["status"];
+  outputs: Array<{ relative_path: string; media_type: string; size_bytes: number; sha256: string; rows: number; split_key: string | null }>;
+  files_considered: number;
+  files_accepted: number;
+  files_rejected: number;
+  rows_read: number;
+  rows_output: number;
+  rows_rejected: number;
+  duplicate_rows: number;
+  warnings: string[];
 }

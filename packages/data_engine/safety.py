@@ -88,4 +88,3 @@ class Workspace:
         for name in ("config-snapshot", "logs", "checkpoints", "outputs"):
             (directory / name).mkdir()
         return directory
-
