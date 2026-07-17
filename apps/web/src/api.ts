@@ -1,4 +1,7 @@
-import type { DiscoveryResult, PreviewResult, Project, RunRecord, SourceHandle, Workflow } from "./types";
+import type {
+  BackgroundJob, DiscoveryResult, PreviewResult, Project, RunRecord, SchemaDriftResult,
+  SourceHandle, TableDiscovery, Workflow,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -49,7 +52,33 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source_id: sourceId, workflow, idempotency_key: crypto.randomUUID() }),
     }),
+  submitJob: (sourceId: string, workflow: Workflow) =>
+    request<BackgroundJob>("/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_id: sourceId, workflow, idempotency_key: crypto.randomUUID() }),
+    }),
+  getJob: (jobId: string) => request<BackgroundJob>(`/jobs/${jobId}`),
+  cancelJob: (jobId: string) => request<BackgroundJob>(`/jobs/${jobId}/cancel`, { method: "POST" }),
+  retryJob: (jobId: string) => request<BackgroundJob>(`/jobs/${jobId}/retry`, { method: "POST" }),
+  getRun: (runId: string) => request<RunRecord>(`/runs/${runId}`),
+  analyzeDrift: (workflow: Workflow, observed: TableDiscovery) =>
+    request<SchemaDriftResult>("/schema-drift/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expectation: {
+          sheet_name: workflow.discovery_overrides.sheet_name,
+          table_id: observed.table_id,
+          start_row: observed.start_row,
+          start_column: observed.start_column,
+          header_levels: observed.selected_header_rows.length || 1,
+          mapping: workflow.mapping,
+        },
+        observed,
+        policy: { mode: "require_confirmation" },
+      }),
+    }),
   listRuns: (projectId?: string) => request<RunRecord[]>(`/runs${projectId ? `?project_id=${projectId}` : ""}`),
   artifactUrl: (runId: string, index = 0) => `${API_BASE}/artifacts/${runId}/${index}`,
 };
-

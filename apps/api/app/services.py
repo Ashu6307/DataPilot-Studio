@@ -9,8 +9,10 @@ from typing import BinaryIO
 from uuid import UUID
 
 from packages.contracts import (
+    CheckpointRecord,
     DiscoveryOverrides,
     DiscoveryResult,
+    JobSubmission,
     PreviewRequest,
     PreviewResult,
     Project,
@@ -20,7 +22,15 @@ from packages.contracts import (
     SourceHandle,
     WorkflowConfiguration,
 )
-from packages.data_engine import EngineRuntime, RuntimeExecutionError, SourceFile, Workspace, discover_source
+from packages.data_engine import (
+    EngineRuntime,
+    JobControl,
+    RuntimeExecutionError,
+    SourceFile,
+    Workspace,
+    discover_source,
+)
+from packages.data_engine.background import workflow_hash
 from packages.workflow_schema import assert_secret_free
 
 from .repositories import MetadataRepository
@@ -88,3 +98,45 @@ class DataPilotService:
             self.repository.save_run(error.record)
             raise
         return self.repository.save_run(result.record)
+
+    def run_background(self, submission: JobSubmission, control: JobControl) -> RunRecord:
+        request = submission.run
+        handle, source = self._source(request.source_id)
+        control.check_cancelled()
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=request.workflow.id,
+                workflow_version=request.workflow.workflow_version,
+                workflow_hash=workflow_hash(submission),
+                source_fingerprint=source.sha256,
+                completed_stage="request_validated",
+                resumable=True,
+            )
+        )
+        control.progress("source.discovery", 0, None, "Inspecting selected source structure")
+        discovery = discover_source(source, handle, request.workflow.discovery_overrides)
+        estimated_rows = discovery.tables[0].row_count_estimate if discovery.tables else 0
+        control.check_cancelled()
+        control.progress("workflow.execute", 0, estimated_rows, "Executing workflow in isolated run directory")
+        try:
+            result = self.runtime.execute(source, handle, request.workflow, control)
+        except RuntimeExecutionError as error:
+            self.repository.save_run(error.record)
+            raise
+        control.check_cancelled()
+        self.repository.save_run(result.record)
+        control.store.save_checkpoint(
+            CheckpointRecord(
+                job_id=control.job_id,
+                workflow_id=request.workflow.id,
+                workflow_version=request.workflow.workflow_version,
+                workflow_hash=workflow_hash(submission),
+                source_fingerprint=source.sha256,
+                completed_stage="engine_completed",
+                rows_processed=result.record.rows_read,
+                artifact_path=result.record.artifacts[-1] if result.record.artifacts else None,
+                resumable=False,
+            )
+        )
+        return result.record

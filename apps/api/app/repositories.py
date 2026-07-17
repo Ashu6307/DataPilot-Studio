@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from packages.contracts import Project, RunRecord, SourceHandle, WorkflowConfiguration
+from packages.contracts import MappingDecisionAudit, Project, RunRecord, SourceHandle, WorkflowConfiguration
 
 from .database import Database
 
@@ -20,6 +20,13 @@ class MetadataRepository(Protocol):
     def save_run(self, run: RunRecord) -> RunRecord: ...
     def get_run(self, run_id: UUID) -> RunRecord | None: ...
     def list_runs(self, project_id: UUID | None = None) -> list[RunRecord]: ...
+    def save_mapping_decision(
+        self,
+        project_id: UUID,
+        workflow_id: UUID,
+        audit: MappingDecisionAudit,
+        run_id: UUID | None = None,
+    ) -> MappingDecisionAudit: ...
 
 
 class SQLiteMetadataRepository:
@@ -122,3 +129,24 @@ class SQLiteMetadataRepository:
             rows = connection.execute(query, params).fetchall()
         return [RunRecord.model_validate_json(row["record_json"]) for row in rows]
 
+    def save_mapping_decision(
+        self,
+        project_id: UUID,
+        workflow_id: UUID,
+        audit: MappingDecisionAudit,
+        run_id: UUID | None = None,
+    ) -> MappingDecisionAudit:
+        with self.database.connect() as connection:
+            connection.execute(
+                """INSERT INTO mapping_decisions
+                (project_id, workflow_id, run_id, audit_json, created_at)
+                VALUES (?, ?, ?, ?, ?)""",
+                (
+                    str(project_id),
+                    str(workflow_id),
+                    str(run_id) if run_id else None,
+                    audit.model_dump_json(),
+                    audit.created_at.isoformat(),
+                ),
+            )
+        return audit

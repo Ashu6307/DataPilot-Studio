@@ -1,6 +1,6 @@
 # DataPilot Studio
 
-DataPilot Studio is a local-first, metadata-driven data automation workspace. The first vertical slice imports arbitrary Excel/CSV files, discovers structure, maps source columns to stable canonical fields, applies deterministic cleaning and validation, previews impact, exports an isolated Excel evidence pack, and records workflow/run history.
+DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 1B adds bounded multi-table and multi-row-header discovery, explicit schema-drift review and mapping repair, a closed typed expression tree, persistent background execution with cancellation/checkpoints, migration safety, support bundles, semantic golden workbooks, and five anonymised demonstration profiles.
 
 The source of truth is `docs/product/DataPilot_Studio_Commercial_PRD_v1.0.pdf`. Milestone scope and requirement status are recorded in `docs/planning/PRD_TRACEABILITY_MATRIX.md`.
 
@@ -39,6 +39,18 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
+npm --workspace apps/web run test:e2e
+npm audit --audit-level=high
+```
+
+Fixture and reproducibility commands:
+
+```powershell
+python scripts/generate_fixtures.py
+python scripts/generate_demo_profiles.py
+python scripts/generate_golden_workbook.py
+python scripts/benchmark_m1b.py
+python scripts/benchmark_export.py
 ```
 
 ## Runtime safety
@@ -47,5 +59,4 @@ Runtime uploads, projects, run folders, outputs, and SQLite metadata are created
 
 ## Scope
 
-Implemented work is limited to Milestone 0 and the first Milestone 1 vertical slice. Reconciliation, schedulers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.
-
+Implemented work covers Milestones 0, 1A, and 1B. Append/join/pivot, full multi-source reconciliation, schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.

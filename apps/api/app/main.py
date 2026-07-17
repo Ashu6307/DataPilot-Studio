@@ -12,8 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from packages.contracts import (
+    BackgroundJobRecord,
+    CheckpointRecord,
     DiscoveryOverrides,
     DiscoveryResult,
+    JobProgressEvent,
+    JobSubmission,
+    MappingRepairRequest,
+    MappingRepairResponse,
     MappingSet,
     PreviewRequest,
     PreviewResult,
@@ -21,13 +27,17 @@ from packages.contracts import (
     ProjectCreate,
     RunRecord,
     RunRequest,
+    SchemaDriftRequest,
+    SchemaDriftResult,
     SourceHandle,
     WorkflowConfiguration,
 )
-from packages.data_engine import Workspace
+from packages.data_engine import LocalJobExecutor, Workspace
+from packages.data_engine.schema_drift import analyze_schema_drift, repair_mapping
 
 from .config import load_settings
 from .database import Database
+from .job_store import SQLiteJobStore
 from .repositories import SQLiteMetadataRepository
 from .services import DataPilotService
 
@@ -36,12 +46,21 @@ database = Database(settings.database)
 repository = SQLiteMetadataRepository(database)
 workspace = Workspace(settings.workspace)
 service = DataPilotService(repository, workspace)
+job_store = SQLiteJobStore(database)
+job_executor: LocalJobExecutor | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    global job_executor
     database.initialize()
-    yield
+    job_executor = LocalJobExecutor(job_store, service.run_background)
+    try:
+        yield
+    finally:
+        if job_executor is not None:
+            job_executor.shutdown()
+        job_executor = None
 
 
 app = FastAPI(
@@ -61,6 +80,12 @@ app.add_middleware(
 
 def get_service() -> DataPilotService:
     return service
+
+
+def get_job_executor() -> LocalJobExecutor:
+    if job_executor is None:
+        raise HTTPException(503, "BACKGROUND_EXECUTOR_NOT_READY")
+    return job_executor
 
 
 @app.get("/health")
@@ -116,6 +141,23 @@ def validate_mapping(mapping: MappingSet) -> MappingSet:
     return mapping
 
 
+@app.post("/api/v1/schema-drift/analyze", response_model=SchemaDriftResult)
+def analyze_drift(request: SchemaDriftRequest) -> SchemaDriftResult:
+    return analyze_schema_drift(request.expectation, request.observed, request.policy)
+
+
+@app.post("/api/v1/mappings/repair", response_model=MappingRepairResponse)
+def repair_drift_mapping(request: MappingRepairRequest) -> MappingRepairResponse:
+    mapping, audit = repair_mapping(request.mapping, request.decisions)
+    repository.save_mapping_decision(
+        request.project_id,
+        request.workflow_id,
+        audit,
+        request.run_id,
+    )
+    return MappingRepairResponse(mapping=mapping, audit=audit)
+
+
 @app.post("/api/v1/workflows/validate", response_model=WorkflowConfiguration)
 def validate_workflow(
     workflow: WorkflowConfiguration, current: DataPilotService = Depends(get_service)
@@ -157,6 +199,65 @@ def run(request: RunRequest, current: DataPilotService = Depends(get_service)) -
         raise HTTPException(404, str(error)) from error
     except (ValueError, RuntimeError, OSError) as error:
         raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/jobs", response_model=BackgroundJobRecord, status_code=202)
+def submit_job(
+    request: RunRequest,
+    executor: LocalJobExecutor = Depends(get_job_executor),
+) -> BackgroundJobRecord:
+    return executor.submit(JobSubmission(run=request))
+
+
+@app.get("/api/v1/jobs", response_model=list[BackgroundJobRecord])
+def list_jobs(project_id: UUID | None = None) -> list[BackgroundJobRecord]:
+    return job_store.list_jobs(project_id)
+
+
+@app.get("/api/v1/jobs/{job_id}", response_model=BackgroundJobRecord)
+def get_job(job_id: UUID) -> BackgroundJobRecord:
+    job = job_store.get(job_id)
+    if job is None:
+        raise HTTPException(404, "JOB_NOT_FOUND")
+    return job
+
+
+@app.get("/api/v1/jobs/{job_id}/events", response_model=list[JobProgressEvent])
+def get_job_events(job_id: UUID) -> list[JobProgressEvent]:
+    if job_store.get(job_id) is None:
+        raise HTTPException(404, "JOB_NOT_FOUND")
+    return job_store.events(job_id)
+
+
+@app.get("/api/v1/jobs/{job_id}/checkpoints", response_model=list[CheckpointRecord])
+def get_job_checkpoints(job_id: UUID) -> list[CheckpointRecord]:
+    if job_store.get(job_id) is None:
+        raise HTTPException(404, "JOB_NOT_FOUND")
+    return job_store.checkpoints(job_id)
+
+
+@app.post("/api/v1/jobs/{job_id}/cancel", response_model=BackgroundJobRecord)
+def cancel_job(
+    job_id: UUID,
+    executor: LocalJobExecutor = Depends(get_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.cancel(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@app.post("/api/v1/jobs/{job_id}/retry", response_model=BackgroundJobRecord, status_code=202)
+def retry_job(
+    job_id: UUID,
+    executor: LocalJobExecutor = Depends(get_job_executor),
+) -> BackgroundJobRecord:
+    try:
+        return executor.retry(job_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
 
 
 @app.get("/api/v1/runs", response_model=list[RunRecord])

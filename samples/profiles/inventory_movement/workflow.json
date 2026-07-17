@@ -1,0 +1,197 @@
+{
+  "schema_version": "1.1",
+  "compatibility_version": 1,
+  "id": "16f531a0-83fe-5e74-b4f5-9708e5ed4144",
+  "workflow_version": 1,
+  "project_id": "9c60ad7f-fc4a-54e2-9b5c-fac21a2575e7",
+  "display_name": "Inventory movement",
+  "source_connector": "file.excel",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": null,
+    "header_rows": [
+      1,
+      2
+    ],
+    "table_id": null,
+    "header_search_depth": 25,
+    "preview_rows": 25,
+    "profile_sample_rows": 10000,
+    "max_header_levels": 3,
+    "header_flattening_separator": "."
+  },
+  "mapping": {
+    "id": "4b04225b-0966-55a3-9053-85a55eb2e12c",
+    "version": 1,
+    "canonical_fields": [
+      {
+        "id": "item_id",
+        "label": "Item ID",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "warehouse",
+        "label": "Warehouse",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "opening",
+        "label": "Opening",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "inward",
+        "label": "Inward",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "outward",
+        "label": "Outward",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      }
+    ],
+    "mappings": [
+      {
+        "source_column": "Item.Code",
+        "canonical_field_id": "item_id",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Item.Warehouse",
+        "canonical_field_id": "warehouse",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Movement.Opening",
+        "canonical_field_id": "opening",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Movement.Inward",
+        "canonical_field_id": "inward",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Movement.Outward",
+        "canonical_field_id": "outward",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      }
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "anonymised-demo-generator"
+  },
+  "operations": [],
+  "calculations": [
+    {
+      "calculation_id": "calculated_closing",
+      "version": 1,
+      "output_canonical_field": "calculated_closing",
+      "output_type": "decimal",
+      "expression": {
+        "kind": "call",
+        "value": null,
+        "value_type": null,
+        "field_id": null,
+        "function": "subtract",
+        "args": [
+          {
+            "kind": "call",
+            "value": null,
+            "value_type": null,
+            "field_id": null,
+            "function": "add",
+            "args": [
+              {
+                "kind": "field",
+                "value": null,
+                "value_type": null,
+                "field_id": "opening",
+                "function": null,
+                "args": []
+              },
+              {
+                "kind": "field",
+                "value": null,
+                "value_type": null,
+                "field_id": "inward",
+                "function": null,
+                "args": []
+              }
+            ]
+          },
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "outward",
+            "function": null,
+            "args": []
+          }
+        ]
+      },
+      "null_policy": "propagate",
+      "error_policy": "reject_row",
+      "reason_code": "INVENTORY_MOVEMENT_CALCULATED_CLOSING_FAILED",
+      "description": "Opening plus inward minus outward",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "validation_rules": [
+    {
+      "id": "NEGATIVE_STOCK",
+      "rule_type": "min_max",
+      "field_id": "calculated_closing",
+      "severity": "error",
+      "reason_code": "NEGATIVE_STOCK",
+      "message": "Calculated closing stock cannot be negative",
+      "config": {
+        "min": 0
+      }
+    }
+  ],
+  "export": {
+    "filename_prefix": "inventory_movement",
+    "include_summary": true,
+    "include_rejected_rows": true,
+    "include_source_metadata": true
+  },
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised M1B demonstration profile"
+}

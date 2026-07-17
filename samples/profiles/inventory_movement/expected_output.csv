@@ -1,0 +1,3 @@
+item_id,warehouse,opening,inward,outward,calculated_closing,expected_reason
+SKU-001,WH-A,10,5,8,7,
+SKU-002,WH-B,2,1,6,-3,NEGATIVE_STOCK

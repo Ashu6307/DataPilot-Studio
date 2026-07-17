@@ -17,7 +17,10 @@ def apply_mapping(table: pl.DataFrame, mapping_set: MappingSet) -> pl.DataFrame:
         if mapping.source_column is not None:
             if mapping.source_column not in available:
                 field = next(item for item in mapping_set.canonical_fields if item.id == target)
-                alias_match = next((alias for alias in field.aliases if alias in available), None)
+                alias_match = next(
+                    (alias for alias in [field.label, *field.aliases] if alias in available),
+                    None,
+                )
                 if alias_match is None:
                     if mapping.default_value is not None:
                         expressions.append(pl.lit(_as_text(mapping.default_value)).alias(target))
@@ -44,4 +47,3 @@ def apply_mapping(table: pl.DataFrame, mapping_set: MappingSet) -> pl.DataFrame:
 
 def _as_text(value: Any) -> str | None:
     return None if value is None else str(value)
-

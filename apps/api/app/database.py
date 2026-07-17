@@ -7,6 +7,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from packages.contracts import DatabaseMigrationReport
+
+from .migrations import SQLiteMigrationManager
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -52,11 +56,11 @@ CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 class Database:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.last_migration_report: DatabaseMigrationReport | None = None
         path.parent.mkdir(parents=True, exist_ok=True)
 
     def initialize(self) -> None:
-        with self.connect() as connection:
-            connection.executescript(SCHEMA)
+        self.last_migration_report = SQLiteMigrationManager(self.path).migrate()
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -71,4 +75,3 @@ class Database:
             raise
         finally:
             connection.close()
-

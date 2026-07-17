@@ -1,0 +1,278 @@
+{
+  "schema_version": "1.1",
+  "compatibility_version": 1,
+  "id": "75ff2026-2567-58dd-9ed6-da8f57293659",
+  "workflow_version": 1,
+  "project_id": "ae1f849b-c953-54e6-8976-6b45cff4c81a",
+  "display_name": "Sales MIS region summary",
+  "source_connector": "file.csv",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": 1,
+    "header_rows": null,
+    "table_id": null,
+    "header_search_depth": 25,
+    "preview_rows": 25,
+    "profile_sample_rows": 10000,
+    "max_header_levels": 3,
+    "header_flattening_separator": "."
+  },
+  "mapping": {
+    "id": "43d9f5c2-230b-5e4b-b4d1-5f267bdfe60e",
+    "version": 1,
+    "canonical_fields": [
+      {
+        "id": "branch_id",
+        "label": "Branch ID",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Location ID"
+        ]
+      },
+      {
+        "id": "region",
+        "label": "Region",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "target",
+        "label": "Target",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "actual",
+        "label": "Actual",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      }
+    ],
+    "mappings": [
+      {
+        "source_column": "Branch Code",
+        "canonical_field_id": "branch_id",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Region",
+        "canonical_field_id": "region",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Target",
+        "canonical_field_id": "target",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Actual",
+        "canonical_field_id": "actual",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      }
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "anonymised-demo-generator"
+  },
+  "operations": [
+    {
+      "id": "56d31502-9455-51dd-b645-e1ccb3bbda72",
+      "operation_id": "group.aggregate",
+      "operation_version": 1,
+      "config": {
+        "group_by": [
+          "region"
+        ],
+        "aggregates": [
+          {
+            "field_id": "target",
+            "function": "sum",
+            "output_field_id": "target"
+          },
+          {
+            "field_id": "actual",
+            "function": "sum",
+            "output_field_id": "actual"
+          }
+        ]
+      },
+      "enabled": true
+    }
+  ],
+  "calculations": [
+    {
+      "calculation_id": "variance",
+      "version": 1,
+      "output_canonical_field": "variance",
+      "output_type": "decimal",
+      "expression": {
+        "kind": "call",
+        "value": null,
+        "value_type": null,
+        "field_id": null,
+        "function": "subtract",
+        "args": [
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "actual",
+            "function": null,
+            "args": []
+          },
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "target",
+            "function": null,
+            "args": []
+          }
+        ]
+      },
+      "null_policy": "propagate",
+      "error_policy": "reject_row",
+      "reason_code": "SALES_MIS_VARIANCE_FAILED",
+      "description": "Actual minus target",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "calculation_id": "status",
+      "version": 1,
+      "output_canonical_field": "status",
+      "output_type": "text",
+      "expression": {
+        "kind": "call",
+        "value": null,
+        "value_type": null,
+        "field_id": null,
+        "function": "if",
+        "args": [
+          {
+            "kind": "call",
+            "value": null,
+            "value_type": null,
+            "field_id": null,
+            "function": "greater_than",
+            "args": [
+              {
+                "kind": "field",
+                "value": null,
+                "value_type": null,
+                "field_id": "actual",
+                "function": null,
+                "args": []
+              },
+              {
+                "kind": "field",
+                "value": null,
+                "value_type": null,
+                "field_id": "target",
+                "function": null,
+                "args": []
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "above_target",
+            "value_type": "text",
+            "field_id": null,
+            "function": null,
+            "args": []
+          },
+          {
+            "kind": "call",
+            "value": null,
+            "value_type": null,
+            "field_id": null,
+            "function": "if",
+            "args": [
+              {
+                "kind": "call",
+                "value": null,
+                "value_type": null,
+                "field_id": null,
+                "function": "equal",
+                "args": [
+                  {
+                    "kind": "field",
+                    "value": null,
+                    "value_type": null,
+                    "field_id": "actual",
+                    "function": null,
+                    "args": []
+                  },
+                  {
+                    "kind": "field",
+                    "value": null,
+                    "value_type": null,
+                    "field_id": "target",
+                    "function": null,
+                    "args": []
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "value": "on_target",
+                "value_type": "text",
+                "field_id": null,
+                "function": null,
+                "args": []
+              },
+              {
+                "kind": "literal",
+                "value": "below_target",
+                "value_type": "text",
+                "field_id": null,
+                "function": null,
+                "args": []
+              }
+            ]
+          }
+        ]
+      },
+      "null_policy": "propagate",
+      "error_policy": "reject_row",
+      "reason_code": "SALES_MIS_STATUS_FAILED",
+      "description": "Region performance status",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "validation_rules": [],
+  "export": {
+    "filename_prefix": "sales_mis",
+    "include_summary": true,
+    "include_rejected_rows": true,
+    "include_source_metadata": true
+  },
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised M1B demonstration profile"
+}

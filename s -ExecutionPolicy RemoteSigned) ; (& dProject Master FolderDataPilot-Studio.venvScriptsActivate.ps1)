@@ -1,0 +1,45 @@
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/app/database.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/app/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/app/repositories.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/app/services.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/e2e/workspace.spec.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/App.test.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/api.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/styles.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/planning/IMPLEMENTATION_ROADMAP.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/planning/PRD_TRACEABILITY_MATRIX.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/contracts/models.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/data_engine/__init__.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/data_engine/discovery.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/data_engine/mapping.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/data_engine/operations.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/data_engine/runtime.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/workflow_schema/__init__.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/generate_fixtures.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/unit/test_operations.py', LF will be replaced by CRLF the next time Git touches it
+ README.md                                |  17 [32m+[m[31m-[m
+ apps/api/app/database.py                 |   9 [32m+[m[31m-[m
+ apps/api/app/main.py                     | 105 [32m+++++++[m[31m-[m
+ apps/api/app/repositories.py             |  30 [32m++[m[31m-[m
+ apps/api/app/services.py                 |  54 [32m+++[m[31m-[m
+ apps/web/e2e/workspace.spec.ts           |  30 [32m+++[m
+ apps/web/src/App.test.tsx                |   3 [32m+[m
+ apps/web/src/App.tsx                     | 101 [32m++++++[m[31m-[m
+ apps/web/src/api.ts                      |  33 [32m++[m[31m-[m
+ apps/web/src/styles.css                  |   2 [32m+[m[31m-[m
+ apps/web/src/types.ts                    |  86 [32m+++++[m[31m-[m
+ docs/planning/IMPLEMENTATION_ROADMAP.md  |   9 [32m+[m[31m-[m
+ docs/planning/PRD_TRACEABILITY_MATRIX.md |  26 [32m+[m[31m-[m
+ packages/contracts/models.py             | 398 [32m++++++++++++++++++++++++++[m[31m-[m
+ packages/data_engine/__init__.py         |   5 [32m+[m
+ packages/data_engine/discovery.py        | 444 [32m+++++++++++++++++++++++++[m[31m------[m
+ packages/data_engine/mapping.py          |   6 [32m+[m[31m-[m
+ packages/data_engine/operations.py       |  48 [32m+++[m[31m-[m
+ packages/data_engine/runtime.py          | 101 [32m++++++[m[31m-[m
+ packages/workflow_schema/__init__.py     |  13 [32m+[m[31m-[m
+ scripts/generate_fixtures.py             |  81 [32m++++++[m
+ tests/unit/test_operations.py            |  24 [32m++[m
+ 22 files changed, 1480 insertions(+), 145 deletions(-)

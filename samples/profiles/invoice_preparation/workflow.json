@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.1",
+  "compatibility_version": 1,
+  "id": "8e7e7f97-a4f9-58d7-8582-70500b75c127",
+  "workflow_version": 1,
+  "project_id": "d139dfe2-e38a-5e17-afeb-24594f49a407",
+  "display_name": "Invoice reconciliation preparation",
+  "source_connector": "file.csv",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": 1,
+    "header_rows": null,
+    "table_id": null,
+    "header_search_depth": 25,
+    "preview_rows": 25,
+    "profile_sample_rows": 10000,
+    "max_header_levels": 3,
+    "header_flattening_separator": "."
+  },
+  "mapping": {
+    "id": "bca07c21-2505-52ee-a1d3-042c4e1fb657",
+    "version": 1,
+    "canonical_fields": [
+      {
+        "id": "vendor",
+        "label": "Vendor",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Supplier"
+        ]
+      },
+      {
+        "id": "invoice_id",
+        "label": "Invoice Number",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Invoice No"
+        ]
+      },
+      {
+        "id": "amount",
+        "label": "Amount",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      },
+      {
+        "id": "due_date",
+        "label": "Due Date",
+        "data_type": "date",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": []
+      }
+    ],
+    "mappings": [
+      {
+        "source_column": "Vendor Name",
+        "canonical_field_id": "vendor",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Invoice No",
+        "canonical_field_id": "invoice_id",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Amount",
+        "canonical_field_id": "amount",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Due Date",
+        "canonical_field_id": "due_date",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      }
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "anonymised-demo-generator"
+  },
+  "operations": [],
+  "calculations": [
+    {
+      "calculation_id": "ageing_days",
+      "version": 1,
+      "output_canonical_field": "ageing_days",
+      "output_type": "integer",
+      "expression": {
+        "kind": "call",
+        "value": null,
+        "value_type": null,
+        "field_id": null,
+        "function": "date_difference",
+        "args": [
+          {
+            "kind": "call",
+            "value": null,
+            "value_type": null,
+            "field_id": null,
+            "function": "today",
+            "args": []
+          },
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "due_date",
+            "function": null,
+            "args": []
+          }
+        ]
+      },
+      "null_policy": "propagate",
+      "error_policy": "reject_row",
+      "reason_code": "INVOICE_PREPARATION_AGEING_DAYS_FAILED",
+      "description": "Age in days from deterministic execution date",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "validation_rules": [
+    {
+      "id": "AMOUNT_NON_NEGATIVE",
+      "rule_type": "min_max",
+      "field_id": "amount",
+      "severity": "error",
+      "reason_code": "INVOICE_AMOUNT_INVALID",
+      "message": "Invoice amount must be non-negative",
+      "config": {
+        "min": 0
+      }
+    }
+  ],
+  "export": {
+    "filename_prefix": "invoice_preparation",
+    "include_summary": true,
+    "include_rejected_rows": true,
+    "include_source_metadata": true
+  },
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised M1B demonstration profile"
+}

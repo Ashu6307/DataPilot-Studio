@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.1",
+  "compatibility_version": 1,
+  "id": "0ea7a806-cf30-53b0-9f9a-d4249f62df33",
+  "workflow_version": 1,
+  "project_id": "ec9dc4ae-56b5-5be7-9af4-9043c17ef894",
+  "display_name": "Generic monthly canonicalisation",
+  "source_connector": "file.csv",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": 1,
+    "header_rows": null,
+    "table_id": null,
+    "header_search_depth": 25,
+    "preview_rows": 25,
+    "profile_sample_rows": 10000,
+    "max_header_levels": 3,
+    "header_flattening_separator": "."
+  },
+  "mapping": {
+    "id": "81c2c07e-94d4-53b7-849d-5fe547a6e5e0",
+    "version": 1,
+    "canonical_fields": [
+      {
+        "id": "branch_id",
+        "label": "Branch ID",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Location ID"
+        ]
+      },
+      {
+        "id": "period",
+        "label": "Period",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Month"
+        ]
+      },
+      {
+        "id": "sales",
+        "label": "Sales",
+        "data_type": "decimal",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Revenue"
+        ]
+      }
+    ],
+    "mappings": [
+      {
+        "source_column": "Branch Code",
+        "canonical_field_id": "branch_id",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Month",
+        "canonical_field_id": "period",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Sales",
+        "canonical_field_id": "sales",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      }
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "anonymised-demo-generator"
+  },
+  "operations": [],
+  "calculations": [],
+  "validation_rules": [],
+  "export": {
+    "filename_prefix": "generic_monthly_consolidation",
+    "include_summary": true,
+    "include_rejected_rows": true,
+    "include_source_metadata": true
+  },
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised M1B demonstration profile"
+}

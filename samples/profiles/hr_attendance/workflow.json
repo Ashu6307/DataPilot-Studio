@@ -1,0 +1,207 @@
+{
+  "schema_version": "1.1",
+  "compatibility_version": 1,
+  "id": "0e1103a6-7045-5c38-bae8-457bb99afc24",
+  "workflow_version": 1,
+  "project_id": "c350e1bd-ddb7-5b78-a79a-09e3c97826f0",
+  "display_name": "HR attendance quality",
+  "source_connector": "file.csv",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": 1,
+    "header_rows": null,
+    "table_id": null,
+    "header_search_depth": 25,
+    "preview_rows": 25,
+    "profile_sample_rows": 10000,
+    "max_header_levels": 3,
+    "header_flattening_separator": "."
+  },
+  "mapping": {
+    "id": "287c82f7-7e66-535f-b6b4-fa86988c7589",
+    "version": 1,
+    "canonical_fields": [
+      {
+        "id": "employee_id",
+        "label": "Employee ID",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Staff ID"
+        ]
+      },
+      {
+        "id": "work_date",
+        "label": "Work Date",
+        "data_type": "date",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Date"
+        ]
+      },
+      {
+        "id": "status",
+        "label": "Status",
+        "data_type": "text",
+        "required": true,
+        "nullable": false,
+        "unique": false,
+        "aliases": [
+          "Attendance Status"
+        ]
+      },
+      {
+        "id": "hours",
+        "label": "Hours",
+        "data_type": "decimal",
+        "required": false,
+        "nullable": true,
+        "unique": false,
+        "aliases": []
+      }
+    ],
+    "mappings": [
+      {
+        "source_column": "Employee Code",
+        "canonical_field_id": "employee_id",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Work Date",
+        "canonical_field_id": "work_date",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Status",
+        "canonical_field_id": "status",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      },
+      {
+        "source_column": "Hours",
+        "canonical_field_id": "hours",
+        "confidence": 1,
+        "user_confirmed": true,
+        "constant_value": null,
+        "default_value": null
+      }
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "anonymised-demo-generator"
+  },
+  "operations": [],
+  "calculations": [
+    {
+      "calculation_id": "attendance_key",
+      "version": 1,
+      "output_canonical_field": "attendance_key",
+      "output_type": "text",
+      "expression": {
+        "kind": "call",
+        "value": null,
+        "value_type": null,
+        "field_id": null,
+        "function": "concatenate",
+        "args": [
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "employee_id",
+            "function": null,
+            "args": []
+          },
+          {
+            "kind": "literal",
+            "value": "|",
+            "value_type": "text",
+            "field_id": null,
+            "function": null,
+            "args": []
+          },
+          {
+            "kind": "field",
+            "value": null,
+            "value_type": null,
+            "field_id": "work_date",
+            "function": null,
+            "args": []
+          }
+        ]
+      },
+      "null_policy": "propagate",
+      "error_policy": "reject_row",
+      "reason_code": "HR_ATTENDANCE_ATTENDANCE_KEY_FAILED",
+      "description": "Composite Employee ID and Date concept",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "validation_rules": [
+    {
+      "id": "EMPLOYEE_REQUIRED",
+      "rule_type": "required",
+      "field_id": "employee_id",
+      "severity": "blocking",
+      "reason_code": "EMPLOYEE_ID_MISSING",
+      "message": "Employee ID is required",
+      "config": {}
+    },
+    {
+      "id": "ATTENDANCE_KEY_UNIQUE",
+      "rule_type": "unique",
+      "field_id": "attendance_key",
+      "severity": "error",
+      "reason_code": "EMPLOYEE_DATE_DUPLICATE",
+      "message": "Employee ID and date must be unique",
+      "config": {}
+    },
+    {
+      "id": "STATUS_ALLOWED",
+      "rule_type": "allowed_values",
+      "field_id": "status",
+      "severity": "error",
+      "reason_code": "ATTENDANCE_STATUS_INVALID",
+      "message": "Attendance status is not allowed",
+      "config": {
+        "values": [
+          "present",
+          "absent",
+          "leave"
+        ]
+      }
+    },
+    {
+      "id": "DATE_VALID",
+      "rule_type": "data_type",
+      "field_id": "work_date",
+      "severity": "error",
+      "reason_code": "WORK_DATE_INVALID",
+      "message": "Work date must be an ISO date",
+      "config": {
+        "data_type": "date"
+      }
+    }
+  ],
+  "export": {
+    "filename_prefix": "hr_attendance",
+    "include_summary": true,
+    "include_rejected_rows": true,
+    "include_source_metadata": true
+  },
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised M1B demonstration profile"
+}

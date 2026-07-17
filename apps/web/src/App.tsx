@@ -1,7 +1,8 @@
 import {
   Activity, AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, CircleDot,
   Clock3, Database, Download, FileOutput, FileSearch, Fingerprint, FolderPlus, History,
-  Layers3, LoaderCircle, Map as MapIcon, Menu, Play, Plus, Save, Settings2, ShieldCheck,
+  Calculator, GitCompareArrows, Layers3, ListChecks, LoaderCircle, Map as MapIcon, Menu, Play,
+  Plus, Save, Settings2, ShieldCheck,
   SlidersHorizontal, Sparkles, Table2, UploadCloud, WandSparkles, X, XCircle,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
@@ -10,8 +11,9 @@ import { DataTable } from "./components/DataTable";
 import { MetricCard } from "./components/MetricCard";
 import { StatusChip } from "./components/StatusChip";
 import type {
-  CanonicalField, ColumnMapping, DiscoveryResult, OperationNode, PreviewResult, Project,
-  RunRecord, SourceHandle, TableDiscovery, ValidationRule, Workflow,
+  BackgroundJob, CalculatedField, CanonicalField, ColumnMapping, DiscoveryResult, OperationNode,
+  PreviewResult, Project, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery,
+  ValidationRule, Workflow,
 } from "./types";
 
 const stages = [
@@ -20,9 +22,12 @@ const stages = [
   { id: "inspect", label: "Source inspection", icon: FileSearch },
   { id: "profile", label: "Column profile", icon: Activity },
   { id: "mapping", label: "Column mapping", icon: MapIcon },
+  { id: "drift", label: "Schema drift review", icon: GitCompareArrows },
   { id: "cleaning", label: "Cleaning steps", icon: WandSparkles },
+  { id: "calculations", label: "Calculated fields", icon: Calculator },
   { id: "validation", label: "Validation rules", icon: ShieldCheck },
   { id: "preview", label: "Run preview", icon: Play },
+  { id: "queue", label: "Run progress", icon: ListChecks },
   { id: "results", label: "Results & export", icon: FileOutput },
   { id: "history", label: "Run history", icon: History },
 ] as const;
@@ -50,6 +55,8 @@ function App() {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [run, setRun] = useState<RunRecord | null>(null);
+  const [drift, setDrift] = useState<SchemaDriftResult | null>(null);
+  const [job, setJob] = useState<BackgroundJob | null>(null);
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +71,8 @@ function App() {
   function canVisit(target: Stage) {
     if (["workspace", "import", "history"].includes(target)) return true;
     if (["inspect", "profile"].includes(target)) return Boolean(discovery);
-    if (["mapping", "cleaning", "validation", "preview"].includes(target)) return Boolean(workflow);
+    if (["mapping", "drift", "cleaning", "calculations", "validation", "preview"].includes(target)) return Boolean(workflow);
+    if (target === "queue") return Boolean(job);
     return Boolean(run);
   }
 
@@ -130,6 +138,36 @@ function App() {
     if (workflow) setWorkflow({ ...workflow, operations: workflow.operations.filter((node) => node.id !== id), updated_at: new Date().toISOString() });
   }
 
+  async function reviewDrift() {
+    if (!workflow || !table) return;
+    setBusy("Comparing the observed structure with the saved canonical expectation…"); setError(null);
+    try { setDrift(await api.analyzeDrift(workflow, table)); setStage("drift"); }
+    catch (reason) { setError(messageOf(reason)); }
+    finally { setBusy(null); }
+  }
+
+  function addCalculation(functionName: "add" | "subtract" | "multiply" | "divide", left: string, right: string, output: string) {
+    if (!workflow) return;
+    const outputId = slugify(output);
+    const calculation: CalculatedField = {
+      calculation_id: `calc.${outputId}`,
+      version: 1,
+      output_canonical_field: outputId,
+      output_type: "decimal",
+      expression: {
+        kind: "call", value: null, value_type: null, field_id: null, function: functionName,
+        args: [
+          { kind: "field", value: null, value_type: null, field_id: left, function: null, args: [] },
+          { kind: "field", value: null, value_type: null, field_id: right, function: null, args: [] },
+        ],
+      },
+      null_policy: "propagate", error_policy: "set_null", divide_by_zero_policy: "set_null",
+      reason_code: `${outputId.toUpperCase()}_CALCULATION_FAILED`, description: `${left} ${functionName} ${right}`,
+      lineage_enabled: true,
+    };
+    setWorkflow({ ...workflow, schema_version: "1.1", calculations: [...workflow.calculations, calculation], updated_at: new Date().toISOString() });
+  }
+
   function addRule(ruleType: ValidationRule["rule_type"], fieldId: string) {
     if (!workflow) return; const stamp = workflow.validation_rules.length + 1;
     const configs: Record<ValidationRule["rule_type"], Record<string, unknown>> = {
@@ -147,9 +185,33 @@ function App() {
   }
 
   async function execute() {
-    if (!source || !workflow) return; setBusy("Executing in an isolated run directory…"); setError(null);
-    try { const record = await api.run(source.id, workflow); setRun(record); await refreshRuns(); setStage("results"); }
-    catch (reason) { setError(messageOf(reason)); } finally { setBusy(null); }
+    if (!source || !workflow) return; setBusy("Submitting a persistent local background run…"); setError(null);
+    try {
+      const submitted = await api.submitJob(source.id, workflow); setJob(submitted); setStage("queue"); setBusy(null);
+      await monitorJob(submitted.id);
+    } catch (reason) { setError(messageOf(reason)); } finally { setBusy(null); }
+  }
+
+  async function monitorJob(jobId: string) {
+    for (;;) {
+      const current = await api.getJob(jobId); setJob(current);
+      if (["succeeded", "partial"].includes(current.status) && current.run_id) {
+        setRun(await api.getRun(current.run_id)); await refreshRuns(); setStage("results"); return;
+      }
+      if (["cancelled", "failed"].includes(current.status)) {
+        if (current.status === "failed") setError(current.error_message ?? "Background run failed safely.");
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    }
+  }
+
+  async function cancelJob() {
+    if (!job) return; setJob(await api.cancelJob(job.id));
+  }
+
+  async function retryJob() {
+    if (!job) return; setError(null); const retried = await api.retryJob(job.id); setJob(retried); await monitorJob(retried.id);
   }
 
   const progress = Math.round(((stages.findIndex((item) => item.id === stage) + 1) / stages.length) * 100);
@@ -185,10 +247,13 @@ function App() {
           {stage === "import" && <ImportScreen project={project} source={source} onCreate={createProject} onUpload={upload} onContinue={() => discovery && setStage("inspect")} />}
           {stage === "inspect" && discovery && table && <InspectScreen discovery={discovery} table={table} onSelect={rediscover} onContinue={() => setStage("profile")} />}
           {stage === "profile" && table && <ProfileScreen table={table} onContinue={() => setStage("mapping")} />}
-          {stage === "mapping" && workflow && table && <MappingScreen workflow={workflow} table={table} onUpdate={updateCanonical} onContinue={() => setStage("cleaning")} />}
-          {stage === "cleaning" && workflow && <CleaningScreen workflow={workflow} onAdd={addOperation} onRemove={removeOperation} onContinue={() => setStage("validation")} />}
+          {stage === "mapping" && workflow && table && <MappingScreen workflow={workflow} table={table} onUpdate={updateCanonical} onContinue={reviewDrift} />}
+          {stage === "drift" && drift && <SchemaDriftScreen drift={drift} onContinue={() => setStage("cleaning")} />}
+          {stage === "cleaning" && workflow && <CleaningScreen workflow={workflow} onAdd={addOperation} onRemove={removeOperation} onContinue={() => setStage("calculations")} />}
+          {stage === "calculations" && workflow && <CalculationScreen workflow={workflow} onAdd={addCalculation} onRemove={(id) => setWorkflow({ ...workflow, calculations: workflow.calculations.filter((item) => item.calculation_id !== id) })} onContinue={() => setStage("validation")} />}
           {stage === "validation" && workflow && <ValidationScreen workflow={workflow} onAdd={addRule} onRemove={(id) => setWorkflow({ ...workflow, validation_rules: workflow.validation_rules.filter((rule) => rule.id !== id) })} onPreview={saveAndPreview} />}
           {stage === "preview" && preview && workflow && <PreviewScreen preview={preview} workflow={workflow} onExecute={execute} />}
+          {stage === "queue" && job && <JobProgressScreen job={job} onCancel={cancelJob} onRetry={retryJob} />}
           {stage === "results" && run && <ResultsScreen run={run} onHistory={() => setStage("history")} />}
           {stage === "history" && <HistoryScreen runs={runs} />}
         </main>
@@ -239,9 +304,18 @@ function MappingScreen({ workflow, table, onUpdate, onContinue }: { workflow: Wo
   return <><ScreenHead eyebrow="CANONICAL SCHEMA" title="Separate source labels from reusable logic." description="Downstream steps use canonical IDs. Reordering the source will not change the workflow." step="4 of 9"/><section className="panel"><div className="mapping-head"><span>Source column</span><span>Canonical field ID</span><span>Type</span><span>Confidence</span></div>{workflow.mapping.canonical_fields.map((field, index) => { const mapping = workflow.mapping.mappings[index]; const profile = table.columns[index]; return <div className="mapping-row" key={mapping.source_column ?? field.id}><div><Table2 size={16}/><div><strong>{mapping.source_column}</strong><span>{profile?.sample_values.slice(0,2).join(" · ")}</span></div></div><div className="mapping-arrow"><ArrowRight size={16}/></div><label className="sr-label">Canonical ID<input aria-label={`Canonical ID for ${mapping.source_column}`} value={field.id} onChange={(event) => onUpdate(index, event.target.value)}/></label><StatusChip value={field.data_type}/><span className="confidence"><CheckCircle2 size={15}/>{Math.round(mapping.confidence * 100)}%</span></div>})}</section><div className="sticky-action"><div><strong>{workflow.mapping.mappings.length} mappings ready</strong><span>Source labels stay at the connector boundary</span></div><button className="primary-button" onClick={onContinue}>Configure cleaning<ArrowRight size={17}/></button></div></>;
 }
 
+function SchemaDriftScreen({ drift, onContinue }: { drift: SchemaDriftResult; onContinue: () => void }) {
+  return <><ScreenHead eyebrow="REUSE SAFETY" title="Review schema drift before rules run." description="DataPilot compares the observed table with the canonical expectation, explains every difference, and blocks ambiguous mappings." step="Schema drift"/><section className="metrics-grid three"><MetricCard icon={GitCompareArrows} label="Drift findings" value={drift.findings.length} note={drift.policy.mode.replaceAll("_", " ")}/><MetricCard icon={CheckCircle2} label="Safe suggestions" value={Object.keys(drift.auto_accepted).length} note="Unique high-confidence candidates" tone="success"/><MetricCard icon={AlertTriangle} label="Blocking" value={drift.findings.filter((item) => item.blocking).length} note="Requires explicit repair" tone={drift.blocked ? "danger" : "success"}/></section><section className="panel"><div className="panel-title"><div><span className="eyebrow">DRIFT DECISION LOG</span><h3>{drift.findings.length ? "Observed differences" : "No structural drift detected"}</h3></div><StatusChip value={drift.blocked ? "blocked" : "reviewed"}/></div>{drift.findings.length ? <div className="step-stack">{drift.findings.map((finding, index) => <article className="operation-row" key={`${finding.category}-${index}`}><div className="operation-icon validation">{finding.blocking ? <XCircle size={17}/> : <GitCompareArrows size={17}/>}</div><div><strong>{finding.category.replaceAll("_", " ")}</strong><span>{finding.canonical_field_id ?? "Table structure"} · {finding.evidence.join(" · ")}</span></div><b>{Math.round(finding.confidence * 100)}%</b><StatusChip value={finding.blocking ? "blocking" : "warning"}/></article>)}</div> : <div className="empty-state compact"><CheckCircle2/><strong>Saved workflow is compatible</strong><span>Canonical mappings remain uniquely resolvable for this source.</span></div>}</section><div className="sticky-action"><div><strong>{drift.blocked ? "Repair blocking mappings before continuing" : "Drift review recorded"}</strong><span>Low-confidence and ambiguous suggestions are never silently accepted</span></div><button className="primary-button" disabled={drift.blocked} onClick={onContinue}>Continue to cleaning<ArrowRight size={17}/></button></div></>;
+}
+
 function CleaningScreen({ workflow, onAdd, onRemove, onContinue }: { workflow: Workflow; onAdd: (op: string, field: string) => void; onRemove: (id: string) => void; onContinue: () => void }) {
   const [operationId, setOperationId] = useState<string>("text.trim"); const [field, setField] = useState(workflow.mapping.canonical_fields[0]?.id ?? "");
-  return <><ScreenHead eyebrow="DETERMINISTIC CLEANING" title="Build an ordered cleaning recipe." description="Each step is versioned, previewable, and reports affected rows. Add at least three to prove the reusable operation stack." step="5 of 9"/><div className="builder-grid"><section className="panel"><div className="panel-title"><div><span className="eyebrow">OPERATION LIBRARY</span><h3>Add a cleaning step</h3></div><Plus/></div><label>Operation<select value={operationId} onChange={(event) => setOperationId(event.target.value)}>{operations.map(([id,label]) => <option value={id} key={id}>{label}</option>)}</select></label>{operationId !== "row.remove_blank" && <label>Canonical field<select value={field} onChange={(event) => setField(event.target.value)}>{workflow.mapping.canonical_fields.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.id}</option>)}</select></label>}<button className="secondary-button full" onClick={() => onAdd(operationId, field)}><Plus size={17}/>Add to recipe</button></section><section className="panel wide"><div className="panel-title"><div><span className="eyebrow">ORDERED RECIPE</span><h3>{workflow.operations.length} cleaning steps</h3></div><SlidersHorizontal/></div>{workflow.operations.length ? <div className="step-stack">{workflow.operations.map((node,index) => <div className="operation-row" key={node.id}><span className="drag-handle">{index + 1}</span><div className="operation-icon"><WandSparkles size={17}/></div><div><strong>{operations.find(([id]) => id === node.operation_id)?.[1] ?? node.operation_id}</strong><span>{String(node.config.field_id ?? "All canonical fields")} · v{node.operation_version}</span></div><StatusChip value="ready"/><button className="icon-button" onClick={() => onRemove(node.id)} aria-label={`Remove ${node.operation_id}`}><X size={16}/></button></div>)}</div> : <div className="empty-state"><WandSparkles/><strong>No cleaning steps yet</strong><span>Add three reusable operations to continue.</span></div>}</section></div><div className="sticky-action"><div><strong>{workflow.operations.length} configured steps</strong><span>{workflow.operations.length < 3 ? `${3-workflow.operations.length} more recommended for acceptance` : "Vertical-slice minimum reached"}</span></div><button className="primary-button" disabled={workflow.operations.length < 3} onClick={onContinue}>Configure validation<ArrowRight size={17}/></button></div></>;
+  return <><ScreenHead eyebrow="DETERMINISTIC CLEANING" title="Build an ordered cleaning recipe." description="Each step is versioned, previewable, and reports affected rows. Add at least three to prove the reusable operation stack." step="5 of 9"/><div className="builder-grid"><section className="panel"><div className="panel-title"><div><span className="eyebrow">OPERATION LIBRARY</span><h3>Add a cleaning step</h3></div><Plus/></div><label>Operation<select value={operationId} onChange={(event) => setOperationId(event.target.value)}>{operations.map(([id,label]) => <option value={id} key={id}>{label}</option>)}</select></label>{operationId !== "row.remove_blank" && <label>Canonical field<select value={field} onChange={(event) => setField(event.target.value)}>{workflow.mapping.canonical_fields.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.id}</option>)}</select></label>}<button className="secondary-button full" onClick={() => onAdd(operationId, field)}><Plus size={17}/>Add to recipe</button></section><section className="panel wide"><div className="panel-title"><div><span className="eyebrow">ORDERED RECIPE</span><h3>{workflow.operations.length} cleaning steps</h3></div><SlidersHorizontal/></div>{workflow.operations.length ? <div className="step-stack">{workflow.operations.map((node,index) => <div className="operation-row" key={node.id}><span className="drag-handle">{index + 1}</span><div className="operation-icon"><WandSparkles size={17}/></div><div><strong>{operations.find(([id]) => id === node.operation_id)?.[1] ?? node.operation_id}</strong><span>{String(node.config.field_id ?? "All canonical fields")} · v{node.operation_version}</span></div><StatusChip value="ready"/><button className="icon-button" onClick={() => onRemove(node.id)} aria-label={`Remove ${node.operation_id}`}><X size={16}/></button></div>)}</div> : <div className="empty-state"><WandSparkles/><strong>No cleaning steps yet</strong><span>Add three reusable operations to continue.</span></div>}</section></div><div className="sticky-action"><div><strong>{workflow.operations.length} configured steps</strong><span>{workflow.operations.length < 3 ? `${3-workflow.operations.length} more recommended for acceptance` : "Vertical-slice minimum reached"}</span></div><button className="primary-button" disabled={workflow.operations.length < 3} onClick={onContinue}>Configure calculations<ArrowRight size={17}/></button></div></>;
+}
+
+function CalculationScreen({ workflow, onAdd, onRemove, onContinue }: { workflow: Workflow; onAdd: (fn: "add" | "subtract" | "multiply" | "divide", left: string, right: string, output: string) => void; onRemove: (id: string) => void; onContinue: () => void }) {
+  const fields = workflow.mapping.canonical_fields; const [fn, setFn] = useState<"add" | "subtract" | "multiply" | "divide">("add"); const [left, setLeft] = useState(fields[0]?.id ?? ""); const [right, setRight] = useState(fields[1]?.id ?? fields[0]?.id ?? ""); const [output, setOutput] = useState("calculated_value");
+  return <><ScreenHead eyebrow="SAFE EXPRESSIONS" title="Build calculations as inspectable trees." description="Only allowlisted functions and typed field references execute. No eval, scripts, SQL, or arbitrary code paths exist." step="Calculated fields"/><div className="builder-grid"><section className="panel"><div className="panel-title"><div><span className="eyebrow">TREE BUILDER</span><h3>Add arithmetic expression</h3></div><Calculator/></div><label>Function<select value={fn} onChange={(event) => setFn(event.target.value as typeof fn)}><option value="add">Add</option><option value="subtract">Subtract</option><option value="multiply">Multiply</option><option value="divide">Divide safely</option></select></label><label>Left field<select value={left} onChange={(event) => setLeft(event.target.value)}>{fields.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label><label>Right field<select value={right} onChange={(event) => setRight(event.target.value)}>{fields.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label><label>Output canonical ID<input value={output} onChange={(event) => setOutput(event.target.value)} /></label><button className="secondary-button full" disabled={!left || !right || !output} onClick={() => onAdd(fn, left, right, output)}><Plus size={17}/>Add expression tree</button></section><section className="panel wide"><div className="panel-title"><div><span className="eyebrow">NESTED EXPRESSION TREES</span><h3>{workflow.calculations.length} calculated fields</h3></div><ShieldCheck/></div>{workflow.calculations.length ? <div className="step-stack">{workflow.calculations.map((item) => <article className="operation-row expression-row" key={item.calculation_id}><div className="operation-icon"><Calculator size={17}/></div><div><strong>{item.output_canonical_field}</strong><code>{item.expression.function}({item.expression.args.map((arg) => arg.field_id).join(", ")})</code><span>{item.error_policy} · divide by zero: {item.divide_by_zero_policy} · lineage {item.lineage_enabled ? "on" : "off"}</span></div><StatusChip value="typed"/><button className="icon-button" onClick={() => onRemove(item.calculation_id)} aria-label={`Remove ${item.calculation_id}`}><X size={16}/></button></article>)}</div> : <div className="empty-state"><Calculator/><strong>No calculated fields configured</strong><span>Calculations are optional; the closed engine supports nested trees and 34 allowlisted operations.</span></div>}</section></div><div className="sticky-action"><div><strong>Expression configuration is machine-validatable</strong><span>Null and failure policy stay explicit in workflow JSON</span></div><button className="primary-button" onClick={onContinue}>Configure validation<ArrowRight size={17}/></button></div></>;
 }
 
 function ValidationScreen({ workflow, onAdd, onRemove, onPreview }: { workflow: Workflow; onAdd: (type: ValidationRule["rule_type"], field: string) => void; onRemove: (id: string) => void; onPreview: () => void }) {
@@ -251,6 +325,11 @@ function ValidationScreen({ workflow, onAdd, onRemove, onPreview }: { workflow: 
 
 function PreviewScreen({ preview, workflow, onExecute }: { preview: PreviewResult; workflow: Workflow; onExecute: () => void }) {
   return <><ScreenHead eyebrow="PREVIEW BEFORE EXECUTION" title="Review row impact and exceptions." description="This bounded sample uses the same deterministic pipeline as the full run." step="7 of 9"/><section className="metrics-grid"><MetricCard icon={Database} label="Rows read" value={preview.rows_read} note="Bounded preview sample"/><MetricCard icon={CheckCircle2} label="Would write" value={preview.rows_written} note="Passed error gates" tone="success"/><MetricCard icon={XCircle} label="Would reject" value={preview.rows_rejected} note="Never silently discarded" tone="danger"/><MetricCard icon={WandSparkles} label="Rules applied" value={workflow.operations.length + workflow.validation_rules.length} note="Versioned configuration"/></section><div className="tabbed-results"><section className="panel"><div className="panel-title"><div><span className="eyebrow">PROCESSED SAMPLE</span><h3>After cleaning</h3></div><StatusChip value="preview"/></div><DataTable rows={preview.rows} empty="No rows passed the configured validation gates."/></section><section className="panel"><div className="panel-title"><div><span className="eyebrow">VALIDATION FINDINGS</span><h3>{preview.findings.length} explanations</h3></div><AlertTriangle/></div><DataTable rows={preview.findings as unknown as Record<string, unknown>[]} empty="No validation findings in this sample."/></section></div><section className="panel impact-panel"><div className="panel-title"><div><span className="eyebrow">OPERATION IMPACT</span><h3>Before / after evidence</h3></div><Activity/></div>{preview.operation_metrics.map((metric) => <div className="impact-row" key={metric.node_id}><code>{metric.operation_id}</code><span>{metric.rows_in} rows in</span><ArrowRight size={15}/><span>{metric.rows_out} rows out</span><strong>{metric.affected_rows} affected</strong></div>)}</section><div className="sticky-action"><div><strong>Workflow saved and machine-valid</strong><span>Full execution creates a new isolated run directory</span></div><button className="primary-button" onClick={onExecute}><Play size={17}/>Execute full run</button></div></>;
+}
+
+function JobProgressScreen({ job, onCancel, onRetry }: { job: BackgroundJob; onCancel: () => void; onRetry: () => void }) {
+  const active = ["queued", "running", "cancelling"].includes(job.status); const progress = job.progress_percent ?? 0;
+  return <><ScreenHead eyebrow="PERSISTENT LOCAL EXECUTION" title="Run progress stays visible and recoverable." description="The queue persists metadata, records progress events, and cooperatively checks cancellation between operation boundaries." step="Background run"/><section className="result-hero warning-result"><div>{active ? <LoaderCircle className="spin"/> : job.status === "cancelled" ? <XCircle/> : <AlertTriangle/>}</div><span className="eyebrow">JOB STATUS</span><h2>{job.status.replaceAll("_", " ")}</h2><p>Job <code>{job.id}</code> · workflow v{job.workflow_version}</p></section><section className="panel job-progress"><div className="panel-title"><div><span className="eyebrow">CURRENT OPERATION</span><h3>{job.current_operation?.replaceAll("_", " ") ?? "Waiting for worker"}</h3></div><StatusChip value={job.status}/></div><div className="job-progress-track" aria-label={`${Math.round(progress)}% complete`}><span style={{ width: `${progress}%` }}/></div><div className="profile-stats"><span><b>{job.rows_processed}</b> processed</span><span><b>{job.estimated_total_rows ?? "—"}</b> estimated</span><span><b>{job.output_available ? "yes" : "no"}</b> output ready</span></div>{job.error_message && <div className="warning-note"><AlertTriangle size={16}/>{job.error_message}</div>}</section><div className="sticky-action"><div><strong>Progress is stored in SQLite metadata</strong><span>Cancellation never publishes a partial workbook as successful</span></div>{active ? <button className="secondary-button" onClick={onCancel} disabled={job.status === "cancelling"}><X size={17}/>Cancel safely</button> : <button className="primary-button" onClick={onRetry} disabled={!job.retry_eligible}><Play size={17}/>Retry eligible run</button>}</div></>;
 }
 
 function ResultsScreen({ run, onHistory }: { run: RunRecord; onHistory: () => void }) {
@@ -273,7 +352,7 @@ function buildWorkflow(project: Project, source: SourceHandle, table: TableDisco
     { id: "TYPE_1", rule_type: "data_type", field_id: requiredField, severity: "warning", reason_code: "DATA_TYPE_INVALID", message: `${requiredField} does not match its canonical type`, config: { data_type: canonical_fields.find((field) => field.id===requiredField)?.data_type ?? "text" } },
     { id: "LENGTH_1", rule_type: "text_length", field_id: textField, severity: "warning", reason_code: "TEXT_LENGTH_INVALID", message: `${textField} exceeds the configured length`, config: { min: 0, max: 120 } },
   ];
-  return { schema_version:"1.0", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
+  return { schema_version:"1.1", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_rows:table.selected_header_rows, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, calculations:[], validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
 }
 
 function messageOf(reason: unknown) { return reason instanceof Error ? reason.message.replace(/^\{"detail":"?|"?\}$/g, "") : "Unexpected local error"; }

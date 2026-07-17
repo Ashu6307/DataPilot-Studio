@@ -20,6 +20,7 @@ class OperationResult:
     table: pl.DataFrame
     metric: OperationMetric
     filtered_rows: int = 0
+    aggregated_rows: int = 0
 
 
 TextTransform = Callable[[str], str | None]
@@ -143,6 +144,49 @@ def _remove_repeated_headers(table: pl.DataFrame, node: OperationNode) -> tuple[
     return result, removed, removed
 
 
+def _group_aggregate(table: pl.DataFrame, node: OperationNode) -> tuple[pl.DataFrame, int, int]:
+    group_by = node.config.get("group_by")
+    aggregates = node.config.get("aggregates")
+    if not isinstance(group_by, list) or not group_by or not all(isinstance(item, str) for item in group_by):
+        raise ValueError("group_by must be a non-empty list of canonical field IDs")
+    if not isinstance(aggregates, list) or not aggregates:
+        raise ValueError("aggregates must be a non-empty list")
+    missing = set(group_by) - set(table.columns)
+    expressions: list[pl.Expr] = []
+    for item in aggregates:
+        if not isinstance(item, dict):
+            raise ValueError("aggregate entries must be objects")
+        field_id = item.get("field_id")
+        function = item.get("function")
+        output_field_id = item.get("output_field_id")
+        if not all(isinstance(value, str) and value for value in (field_id, function, output_field_id)):
+            raise ValueError("aggregate requires field_id, function, and output_field_id")
+        assert isinstance(field_id, str)
+        assert isinstance(function, str)
+        assert isinstance(output_field_id, str)
+        if field_id not in table.columns:
+            missing.add(field_id)
+            continue
+        expression = pl.col(field_id).cast(pl.Float64, strict=False)
+        if function == "sum":
+            expression = expression.sum()
+        elif function == "minimum":
+            expression = expression.min()
+        elif function == "maximum":
+            expression = expression.max()
+        elif function == "mean":
+            expression = expression.mean()
+        elif function == "count":
+            expression = pl.col(field_id).count()
+        else:
+            raise ValueError(f"AGGREGATE_FUNCTION_UNSUPPORTED: {function}")
+        expressions.append(expression.alias(output_field_id))
+    if missing:
+        raise ValueError(f"OPERATION_FIELDS_NOT_FOUND: {sorted(missing)}")
+    result = table.group_by(group_by, maintain_order=True).agg(expressions)
+    return result, table.height - result.height, 0
+
+
 Operation = Callable[[pl.DataFrame, OperationNode], tuple[pl.DataFrame, int, int]]
 OPERATIONS: dict[str, Operation] = {
     "text.trim": _trim,
@@ -157,6 +201,7 @@ OPERATIONS: dict[str, Operation] = {
     "field.reorder": _reorder_fields,
     "row.remove_blank": _remove_blank_rows,
     "row.remove_repeated_headers": _remove_repeated_headers,
+    "group.aggregate": _group_aggregate,
 }
 
 
@@ -177,4 +222,5 @@ def apply_operation(table: pl.DataFrame, node: OperationNode) -> OperationResult
         affected_rows=affected,
         duration_ms=max(0, int((time.perf_counter() - started) * 1000)),
     )
-    return OperationResult(result, metric, filtered)
+    aggregated = table.height - result.height if node.operation_id == "group.aggregate" else 0
+    return OperationResult(result, metric, filtered, aggregated)

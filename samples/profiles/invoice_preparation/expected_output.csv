@@ -1,0 +1,3 @@
+vendor,invoice_id,amount,due_date,ageing_days,expected_reason
+Synthetic Vendor A,000045,1200,2026-07-01,16,
+Synthetic Vendor B,000046,-5,2026-07-20,-3,INVOICE_AMOUNT_INVALID

@@ -74,3 +74,27 @@ def test_blank_and_repeated_header_rows_are_filtered() -> None:
 def test_unknown_operation_fails() -> None:
     with pytest.raises(ValueError, match="OPERATION_NOT_FOUND"):
         apply_operation(pl.DataFrame({"a": ["x"]}), OperationNode(operation_id="unknown.operation"))
+
+
+def test_group_aggregate_is_canonical_and_reconciles_collapsed_rows() -> None:
+    table = pl.DataFrame(
+        {"region": ["North", "North", "South"], "target": ["10", "20", "30"]}
+    )
+    result = apply_operation(
+        table,
+        OperationNode(
+            operation_id="group.aggregate",
+            config={
+                "group_by": ["region"],
+                "aggregates": [
+                    {"field_id": "target", "function": "sum", "output_field_id": "target"}
+                ],
+            },
+        ),
+    )
+    assert result.table.to_dicts() == [
+        {"region": "North", "target": 30},
+        {"region": "South", "target": 30},
+    ]
+    assert result.aggregated_rows == 1
+    assert result.filtered_rows == 0

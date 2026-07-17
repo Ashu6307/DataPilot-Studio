@@ -19,6 +19,9 @@ describe("DataPilot workspace", () => {
   it("does not present locked future steps as available", () => {
     render(<App />);
     expect(screen.getByRole("button", { name: /Source inspection/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Schema drift review/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Calculated fields/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Run progress/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Results & export/i })).toBeDisabled();
   });
 });
