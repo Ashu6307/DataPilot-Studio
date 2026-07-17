@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "compatibility_version": 1,
+  "id": "10000000-0000-4000-8000-000000000001",
+  "workflow_version": 1,
+  "project_id": "20000000-0000-4000-8000-000000000001",
+  "display_name": "Anonymised attendance quality check",
+  "source_connector": "file.csv",
+  "discovery_overrides": {
+    "sheet_name": null,
+    "header_row": 1,
+    "header_search_depth": 25,
+    "preview_rows": 25
+  },
+  "mapping": {
+    "id": "30000000-0000-4000-8000-000000000001",
+    "version": 1,
+    "canonical_fields": [
+      {"id": "employee_id", "label": "Employee ID", "data_type": "text", "required": true, "nullable": false, "unique": true, "aliases": ["Staff ID"]},
+      {"id": "full_name", "label": "Full name", "data_type": "text", "required": true, "nullable": false, "unique": false, "aliases": ["Employee Name"]},
+      {"id": "status", "label": "Status", "data_type": "text", "required": true, "nullable": false, "unique": false, "aliases": ["State"]},
+      {"id": "hours", "label": "Hours", "data_type": "decimal", "required": false, "nullable": true, "unique": false, "aliases": ["Worked Hours"]},
+      {"id": "work_date", "label": "Work date", "data_type": "date", "required": false, "nullable": true, "unique": false, "aliases": ["Date"]}
+    ],
+    "mappings": [
+      {"source_column": "Employee Code", "canonical_field_id": "employee_id", "confidence": 1, "user_confirmed": true, "constant_value": null, "default_value": null},
+      {"source_column": "Full Name", "canonical_field_id": "full_name", "confidence": 1, "user_confirmed": true, "constant_value": null, "default_value": null},
+      {"source_column": "Status", "canonical_field_id": "status", "confidence": 1, "user_confirmed": true, "constant_value": null, "default_value": null},
+      {"source_column": "Hours", "canonical_field_id": "hours", "confidence": 1, "user_confirmed": true, "constant_value": null, "default_value": null},
+      {"source_column": "Work Date", "canonical_field_id": "work_date", "confidence": 1, "user_confirmed": true, "constant_value": null, "default_value": null}
+    ],
+    "created_at": "2026-07-17T00:00:00Z",
+    "created_by": "sample"
+  },
+  "operations": [
+    {"id": "40000000-0000-4000-8000-000000000001", "operation_id": "text.trim", "operation_version": 1, "config": {"field_id": "full_name"}, "enabled": true},
+    {"id": "40000000-0000-4000-8000-000000000002", "operation_id": "text.normalise_spaces", "operation_version": 1, "config": {"field_id": "full_name"}, "enabled": true},
+    {"id": "40000000-0000-4000-8000-000000000003", "operation_id": "text.proper_case", "operation_version": 1, "config": {"field_id": "full_name"}, "enabled": true}
+  ],
+  "validation_rules": [
+    {"id": "EMPLOYEE_REQUIRED", "rule_type": "required", "field_id": "employee_id", "severity": "blocking", "reason_code": "EMPLOYEE_ID_MISSING", "message": "Employee ID is required", "config": {}},
+    {"id": "EMPLOYEE_UNIQUE", "rule_type": "unique", "field_id": "employee_id", "severity": "error", "reason_code": "EMPLOYEE_ID_DUPLICATE", "message": "Employee ID must be unique", "config": {}},
+    {"id": "STATUS_ALLOWED", "rule_type": "allowed_values", "field_id": "status", "severity": "warning", "reason_code": "STATUS_NOT_ALLOWED", "message": "Status must be active or inactive", "config": {"values": ["active", "inactive"]}}
+  ],
+  "export": {"filename_prefix": "attendance_quality", "include_summary": true, "include_rejected_rows": true, "include_source_metadata": true},
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z",
+  "change_note": "Anonymised sample proving portable canonical mapping"
+}
+
