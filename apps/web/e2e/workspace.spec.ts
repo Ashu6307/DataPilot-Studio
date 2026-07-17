@@ -11,6 +11,59 @@ test("workspace is responsive and exposes the local safety model", async ({ page
   await expect(page.getByRole("button", { name: /Source inspection/i })).toBeDisabled();
 });
 
+test("builds and validates a typed visual DAG from a governed template", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Project name").fill("M3A visual workflow proof");
+  await page.getByRole("button", { name: "Create local project" }).click();
+  await page.getByRole("button", { name: /Visual workflow studio/i }).click();
+  await expect(page.getByLabel("Visual workflow studio")).toBeVisible();
+  await page.locator(".dag-palette details").first().locator("summary").click();
+  await page.getByRole("button", { name: "Generic File Cleaning and Validation" }).click();
+  await expect(page.getByLabel(/Saved canonical dataset node/i)).toBeVisible();
+  await expect(page.getByLabel(/Validation Rules node/i)).toBeVisible();
+  const workflowActions = page.locator(".dag-actions");
+  await workflowActions.getByRole("button", { name: "Validate" }).click();
+  await expect(page.getByText("All static checks passed")).toBeVisible();
+  await workflowActions.getByRole("button", { name: "Plan" }).click();
+  await expect(page.getByText("parallel groups")).toBeVisible();
+  await workflowActions.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText(/Draft saved locally/i)).toBeVisible();
+  await workflowActions.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText(/Version 1 published/i)).toBeVisible();
+  await expect(workflowActions.getByRole("button", { name: "Run" })).toBeEnabled();
+  await page.getByLabel("Workflow name").fill("Generic File Cleaning and Validation revised");
+  await workflowActions.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText(/Draft saved locally as version 2/i)).toBeVisible();
+  await workflowActions.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText(/Version 2 published/i)).toBeVisible();
+  await page.getByLabel("Workflow details").getByRole("button", { name: "Runs" }).click();
+  await expect(page.getByLabel("Workflow details").getByText("v2 · published")).toBeVisible();
+  await page.getByRole("button", { name: "Compare latest" }).click();
+  await expect(page.getByText(/v1 → v2:/i)).toBeVisible();
+  await page.getByRole("button", { name: "Clone", exact: true }).click();
+  await expect(page.getByText(/created as draft v1/i)).toBeVisible();
+  await page.getByRole("button", { name: "Restore as new draft" }).click();
+  await expect(page.getByText(/restored as new draft v3/i)).toBeVisible();
+});
+
+test("keeps a 100-node visual canvas interactive", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Project name").fill("M3A 100 node canvas proof");
+  await page.getByRole("button", { name: "Create local project" }).click();
+  await page.getByRole("button", { name: /Visual workflow studio/i }).click();
+  await page.getByLabel("Search node palette").fill("validation.rules");
+  const addValidation = page.locator(".palette-node").filter({ hasText: "validation.rules" });
+  await expect(addValidation).toHaveCount(1);
+  const started = Date.now();
+  for (let index = 0; index < 100; index += 1) await addValidation.click();
+  const durationMs = Date.now() - started;
+  console.log(`M3A_UI_100_NODE_INTERACTION_MS=${durationMs}`);
+  await expect(page.locator(".dag-node")).toHaveCount(100);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await expect(page.getByLabel("Visual workflow studio")).toBeVisible();
+  expect(durationMs).toBeLessThan(20_000);
+});
+
 test("completes the guided CSV to audited export journey", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Project name").fill("E2E quality workspace");

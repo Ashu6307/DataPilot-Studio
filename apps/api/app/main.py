@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,16 +23,28 @@ from packages.contracts import (
     CompositionPreview,
     CompositionPreviewRequest,
     CompositionRunRequest,
+    DagJobSubmission,
+    DagRunRecord,
+    DagRunRequest,
+    DagValidationResult,
+    DagWorkflow,
     DecisionMemory,
     DecisionMemoryDeactivateRequest,
     DiscoveryOverrides,
     DiscoveryResult,
+    EvidencePackageVersion,
+    EvidenceRegenerationRequest,
+    ExecutionPlan,
     FolderScanRequest,
     JobProgressEvent,
     JobSubmission,
+    ManualCheckpoint,
+    ManualCheckpointDecision,
     MappingRepairRequest,
     MappingRepairResponse,
     MappingSet,
+    NodeCapability,
+    NodeRunRecord,
     PreviewRequest,
     PreviewResult,
     Project,
@@ -52,17 +65,30 @@ from packages.contracts import (
     SourceHandle,
     StructureComparisonRequest,
     StructureComparisonResult,
+    SubflowDefinition,
+    WorkflowCloneRequest,
     WorkflowConfiguration,
+    WorkflowDiff,
+    WorkflowDiffRequest,
+    WorkflowLifecycle,
+    WorkflowPlanRequest,
+    WorkflowRestoreRequest,
+    WorkflowVersionRequest,
 )
 from packages.data_engine import LocalJobExecutor, Workspace
 from packages.data_engine.comparison import compare_structures
 from packages.data_engine.composition_background import LocalCompositionJobExecutor
 from packages.data_engine.reconciliation_background import LocalReconciliationJobExecutor
 from packages.data_engine.schema_drift import analyze_schema_drift, repair_mapping
+from packages.workflow_dag import build_execution_plan, default_registry, diff_workflows, validate_dag
+from packages.workflow_dag.runtime import LocalDagExecutor
 
 from .composition_job_store import SQLiteCompositionJobStore
 from .config import load_settings
+from .dag_adapters import application_adapter_registry
+from .dag_repository import SQLiteDagRepository
 from .database import Database
+from .evidence_regeneration import EvidenceRegenerationService
 from .job_store import SQLiteJobStore
 from .reconciliation_job_store import SQLiteReconciliationJobStore
 from .repositories import SQLiteMetadataRepository
@@ -76,19 +102,27 @@ service = DataPilotService(repository, workspace)
 job_store = SQLiteJobStore(database)
 composition_job_store = SQLiteCompositionJobStore(database)
 reconciliation_job_store = SQLiteReconciliationJobStore(database)
+dag_repository = SQLiteDagRepository(database)
+evidence_regeneration_service = EvidenceRegenerationService(repository, dag_repository, workspace)
 job_executor: LocalJobExecutor | None = None
 composition_job_executor: LocalCompositionJobExecutor | None = None
 reconciliation_job_executor: LocalReconciliationJobExecutor | None = None
+dag_executor: LocalDagExecutor | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global composition_job_executor, job_executor, reconciliation_job_executor
+    global composition_job_executor, dag_executor, job_executor, reconciliation_job_executor
     database.initialize()
     job_executor = LocalJobExecutor(job_store, service.run_background)
     composition_job_executor = LocalCompositionJobExecutor(composition_job_store, service.run_composition_background)
     reconciliation_job_executor = LocalReconciliationJobExecutor(
         reconciliation_job_store, service.run_reconciliation_background
+    )
+    dag_executor = LocalDagExecutor(
+        dag_repository,
+        application_adapter_registry(service),
+        settings.workspace,
     )
     try:
         yield
@@ -99,9 +133,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             composition_job_executor.shutdown()
         if reconciliation_job_executor is not None:
             reconciliation_job_executor.shutdown()
+        if dag_executor is not None:
+            dag_executor.shutdown()
         job_executor = None
         composition_job_executor = None
         reconciliation_job_executor = None
+        dag_executor = None
 
 
 app = FastAPI(
@@ -139,6 +176,12 @@ def get_reconciliation_job_executor() -> LocalReconciliationJobExecutor:
     if reconciliation_job_executor is None:
         raise HTTPException(503, "RECONCILIATION_EXECUTOR_NOT_READY")
     return reconciliation_job_executor
+
+
+def get_dag_executor() -> LocalDagExecutor:
+    if dag_executor is None:
+        raise HTTPException(503, "DAG_EXECUTOR_NOT_READY")
+    return dag_executor
 
 
 @app.get("/health")
@@ -585,3 +628,270 @@ def get_artifact(run_id: UUID, artifact_index: int) -> FileResponse:
     if runs_root not in path.parents or not path.is_file():
         raise HTTPException(404, "ARTIFACT_NOT_FOUND")
     return FileResponse(path, filename=path.name)
+
+
+@app.get("/api/v1/dag/capabilities", response_model=list[NodeCapability])
+def list_dag_capabilities() -> list[NodeCapability]:
+    return default_registry.list_capabilities()
+
+
+@app.post("/api/v1/dag/validate", response_model=DagValidationResult)
+def validate_dag_workflow(workflow: DagWorkflow) -> DagValidationResult:
+    return validate_dag(workflow)
+
+
+@app.post("/api/v1/dag/plan", response_model=ExecutionPlan)
+def plan_dag_workflow(request: WorkflowPlanRequest) -> ExecutionPlan:
+    try:
+        return build_execution_plan(request.workflow, request.parameters)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/dag/diff", response_model=WorkflowDiff)
+def diff_dag_workflow(request: WorkflowDiffRequest) -> WorkflowDiff:
+    try:
+        return diff_workflows(request.before, request.after)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/v1/dag/workflows", response_model=DagWorkflow, status_code=201)
+def save_dag_workflow(workflow: DagWorkflow) -> DagWorkflow:
+    validation = validate_dag(workflow)
+    if workflow.lifecycle == WorkflowLifecycle.PUBLISHED and not validation.valid:
+        raise HTTPException(422, "DAG_PUBLISH_VALIDATION_FAILED")
+    try:
+        return dag_repository.save_workflow(workflow)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/api/v1/projects/{project_id}/dag-workflows", response_model=list[DagWorkflow])
+def list_dag_workflows(project_id: UUID) -> list[DagWorkflow]:
+    return dag_repository.list_workflows(project_id)
+
+
+@app.get("/api/v1/dag/workflows/{workflow_id}", response_model=DagWorkflow)
+def get_dag_workflow(workflow_id: UUID, version: int | None = None) -> DagWorkflow:
+    workflow = dag_repository.get_workflow(workflow_id, version)
+    if workflow is None:
+        raise HTTPException(404, "DAG_WORKFLOW_NOT_FOUND")
+    return workflow
+
+
+@app.get("/api/v1/dag/workflows/{workflow_id}/history", response_model=list[DagWorkflow])
+def get_dag_workflow_history(workflow_id: UUID) -> list[DagWorkflow]:
+    latest = dag_repository.get_workflow(workflow_id)
+    if latest is None:
+        raise HTTPException(404, "DAG_WORKFLOW_NOT_FOUND")
+    return [item for item in dag_repository.list_workflows(latest.project_id) if item.id == workflow_id]
+
+
+@app.post("/api/v1/dag/workflows/{workflow_id}/versions", response_model=DagWorkflow, status_code=201)
+def create_dag_workflow_version(workflow_id: UUID, request: WorkflowVersionRequest) -> DagWorkflow:
+    latest = dag_repository.get_workflow(workflow_id)
+    if latest is None:
+        raise HTTPException(404, "DAG_WORKFLOW_NOT_FOUND")
+    if request.workflow.id != workflow_id or request.workflow.project_id != latest.project_id:
+        raise HTTPException(422, "DAG_WORKFLOW_IDENTITY_MISMATCH")
+    now = datetime.now(UTC)
+    created = request.workflow.model_copy(
+        update={
+            "version": latest.version + 1,
+            "lifecycle": WorkflowLifecycle.DRAFT,
+            "change_note": request.change_note,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    return dag_repository.save_workflow(created)
+
+
+@app.post("/api/v1/dag/workflows/{workflow_id}/publish", response_model=DagWorkflow)
+def publish_dag_workflow(workflow_id: UUID, version: int) -> DagWorkflow:
+    workflow = dag_repository.get_workflow(workflow_id, version)
+    if workflow is None:
+        raise HTTPException(404, "DAG_WORKFLOW_NOT_FOUND")
+    validation = validate_dag(workflow)
+    if not validation.valid:
+        raise HTTPException(422, "DAG_PUBLISH_VALIDATION_FAILED")
+    published = workflow.model_copy(update={"lifecycle": WorkflowLifecycle.PUBLISHED, "updated_at": datetime.now(UTC)})
+    return dag_repository.save_workflow(published)
+
+
+@app.post("/api/v1/dag/workflows/{workflow_id}/clone", response_model=DagWorkflow, status_code=201)
+def clone_dag_workflow(workflow_id: UUID, request: WorkflowCloneRequest) -> DagWorkflow:
+    source = dag_repository.get_workflow(workflow_id)
+    if source is None:
+        raise HTTPException(404, "DAG_WORKFLOW_NOT_FOUND")
+    now = datetime.now(UTC)
+    clone = source.model_copy(
+        update={
+            "id": uuid4(),
+            "version": 1,
+            "display_name": request.display_name,
+            "owner_reference": request.owner_reference,
+            "lifecycle": WorkflowLifecycle.DRAFT,
+            "change_note": f"Cloned from {source.id} version {source.version}",
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    return dag_repository.save_workflow(clone)
+
+
+@app.post("/api/v1/dag/workflows/{workflow_id}/restore", response_model=DagWorkflow, status_code=201)
+def restore_dag_workflow(workflow_id: UUID, request: WorkflowRestoreRequest) -> DagWorkflow:
+    source = dag_repository.get_workflow(workflow_id, request.source_version)
+    latest = dag_repository.get_workflow(workflow_id)
+    if source is None or latest is None:
+        raise HTTPException(404, "DAG_WORKFLOW_VERSION_NOT_FOUND")
+    now = datetime.now(UTC)
+    restored = source.model_copy(
+        update={
+            "version": latest.version + 1,
+            "lifecycle": WorkflowLifecycle.DRAFT,
+            "change_note": request.change_note,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    return dag_repository.save_workflow(restored)
+
+
+@app.post("/api/v1/dag/runs", response_model=DagRunRecord, status_code=202)
+def submit_dag_run(
+    request: DagRunRequest,
+    executor: LocalDagExecutor = Depends(get_dag_executor),
+) -> DagRunRecord:
+    try:
+        return executor.submit(DagJobSubmission(request=request))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get("/api/v1/dag/runs", response_model=list[DagRunRecord])
+def list_dag_runs(project_id: UUID | None = None) -> list[DagRunRecord]:
+    return dag_repository.list_runs(project_id)
+
+
+@app.get("/api/v1/dag/runs/{run_id}", response_model=DagRunRecord)
+def get_dag_run(run_id: UUID) -> DagRunRecord:
+    run = dag_repository.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "DAG_RUN_NOT_FOUND")
+    return run
+
+
+@app.get("/api/v1/dag/runs/{run_id}/nodes", response_model=list[NodeRunRecord])
+def list_dag_node_runs(run_id: UUID) -> list[NodeRunRecord]:
+    if dag_repository.get_run(run_id) is None:
+        raise HTTPException(404, "DAG_RUN_NOT_FOUND")
+    return dag_repository.list_node_runs(run_id)
+
+
+@app.get("/api/v1/dag/runs/{run_id}/checkpoints", response_model=list[ManualCheckpoint])
+def list_dag_checkpoints(run_id: UUID) -> list[ManualCheckpoint]:
+    if dag_repository.get_run(run_id) is None:
+        raise HTTPException(404, "DAG_RUN_NOT_FOUND")
+    return dag_repository.list_checkpoints(run_id)
+
+
+@app.post("/api/v1/dag/runs/{run_id}/cancel", response_model=DagRunRecord)
+def cancel_dag_run(run_id: UUID, executor: LocalDagExecutor = Depends(get_dag_executor)) -> DagRunRecord:
+    try:
+        return executor.cancel(run_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@app.post("/api/v1/dag/runs/{run_id}/resume", response_model=DagRunRecord, status_code=202)
+def resume_dag_run(run_id: UUID, executor: LocalDagExecutor = Depends(get_dag_executor)) -> DagRunRecord:
+    try:
+        return executor.resume(run_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.post("/api/v1/dag/runs/{run_id}/retry", response_model=DagRunRecord, status_code=202)
+def retry_dag_run(run_id: UUID, executor: LocalDagExecutor = Depends(get_dag_executor)) -> DagRunRecord:
+    try:
+        return executor.retry(run_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.post(
+    "/api/v1/dag/checkpoints/{checkpoint_id}/decisions",
+    response_model=ManualCheckpointDecision,
+    status_code=201,
+)
+def decide_dag_checkpoint(checkpoint_id: UUID, decision: ManualCheckpointDecision) -> ManualCheckpointDecision:
+    if decision.checkpoint_id != checkpoint_id:
+        raise HTTPException(422, "DAG_CHECKPOINT_ID_MISMATCH")
+    try:
+        return dag_repository.append_decision(decision)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get(
+    "/api/v1/dag/checkpoints/{checkpoint_id}/decisions",
+    response_model=list[ManualCheckpointDecision],
+)
+def list_dag_checkpoint_decisions(checkpoint_id: UUID) -> list[ManualCheckpointDecision]:
+    if dag_repository.get_checkpoint(checkpoint_id) is None:
+        raise HTTPException(404, "DAG_CHECKPOINT_NOT_FOUND")
+    return dag_repository.list_decisions(checkpoint_id)
+
+
+@app.post(
+    "/api/v1/reconciliation-runs/{run_id}/evidence-versions",
+    response_model=EvidencePackageVersion,
+    status_code=201,
+)
+def regenerate_reconciliation_evidence(run_id: UUID, request: EvidenceRegenerationRequest) -> EvidencePackageVersion:
+    if request.run_id != run_id:
+        raise HTTPException(422, "RECONCILIATION_RUN_ID_MISMATCH")
+    try:
+        return evidence_regeneration_service.regenerate(request)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except (ValueError, FileNotFoundError, FileExistsError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get(
+    "/api/v1/reconciliation-runs/{run_id}/evidence-versions",
+    response_model=list[EvidencePackageVersion],
+)
+def list_reconciliation_evidence_versions(run_id: UUID) -> list[EvidencePackageVersion]:
+    return dag_repository.list_evidence_versions(run_id)
+
+
+@app.post("/api/v1/dag/subflows", response_model=SubflowDefinition, status_code=201)
+def save_dag_subflow(subflow: SubflowDefinition) -> SubflowDefinition:
+    try:
+        return dag_repository.save_subflow(subflow)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.get("/api/v1/projects/{project_id}/dag-subflows", response_model=list[SubflowDefinition])
+def list_dag_subflows(project_id: UUID) -> list[SubflowDefinition]:
+    return dag_repository.list_subflows(project_id)
+
+
+@app.get("/api/v1/dag/subflows/{subflow_id}/versions/{version}", response_model=SubflowDefinition)
+def get_dag_subflow(subflow_id: UUID, version: int) -> SubflowDefinition:
+    subflow = dag_repository.get_subflow(subflow_id, version)
+    if subflow is None:
+        raise HTTPException(404, "DAG_SUBFLOW_VERSION_NOT_FOUND")
+    return subflow

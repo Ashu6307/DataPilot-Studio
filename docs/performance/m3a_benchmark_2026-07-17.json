@@ -1,0 +1,72 @@
+{
+  "hardware": {
+    "logical_cores": 8,
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+    "python": "3.14.0"
+  },
+  "limitations": [
+    "tracemalloc excludes native-library allocations and is not complete process RSS",
+    "UI canvas interaction is measured separately by Playwright because this script does not execute a browser",
+    "evidence regeneration timing excludes matching and includes only deterministic export from checkpointed result state"
+  ],
+  "measured_at": "2026-07-17T11:43:41.328814+00:00",
+  "results": [
+    {
+      "duration_seconds": 0.022803,
+      "nodes": 25,
+      "python_peak_bytes": 243077,
+      "scenario": "planning_25_node_linear"
+    },
+    {
+      "duration_seconds": 0.062374,
+      "nodes": 100,
+      "python_peak_bytes": 856896,
+      "scenario": "validation_100_node_linear",
+      "valid": true
+    },
+    {
+      "duration_seconds": 0.004187,
+      "parallel_groups": 3,
+      "python_peak_bytes": 36519,
+      "scenario": "branching_workflow_planning"
+    },
+    {
+      "duration_seconds": 0.004489,
+      "expanded_nodes": 20,
+      "python_peak_bytes": 134262,
+      "scenario": "subflow_expansion_20_nodes"
+    },
+    {
+      "duration_seconds": 0.007942,
+      "python_peak_bytes": 60310,
+      "scenario": "workflow_persistence_25_nodes"
+    },
+    {
+      "duration_seconds": 0.754369,
+      "python_peak_bytes": 10531,
+      "scenario": "node_state_updates_100"
+    },
+    {
+      "duration_seconds": 0.007445,
+      "python_peak_bytes": 10329,
+      "recovered_runs": 1,
+      "scenario": "restart_recovery_one_run"
+    },
+    {
+      "duration_seconds": 0.566715,
+      "output_entries": 19,
+      "python_peak_bytes": 3249239,
+      "scenario": "evidence_regeneration_from_result_checkpoint"
+    },
+    {
+      "browser": "Playwright Chromium",
+      "duration_seconds": 10.949,
+      "interaction": "100 sequential accessible palette additions followed by fit-view",
+      "nodes": 100,
+      "scenario": "ui_canvas_interaction_100_nodes"
+    }
+  ],
+  "workflow_characteristics": "synthetic typed DAGs with closed registry nodes; evidence regeneration reuses an existing reconciliation result"
+}

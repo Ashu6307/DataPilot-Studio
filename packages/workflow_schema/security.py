@@ -14,7 +14,12 @@ def assert_secret_free(value: Any, path: str = "workflow") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
             child_path = f"{path}.{key}"
-            if SECRET_KEY.search(str(key)) and child not in (None, "", "credential_reference"):
+            if (
+                SECRET_KEY.search(str(key))
+                and not isinstance(child, bool)
+                and child not in (None, "", "credential_reference")
+                and not (isinstance(child, str) and child.startswith("credential://"))
+            ):
                 raise ValueError(f"plain-text secret field is forbidden at {child_path}")
             assert_secret_free(child, child_path)
     elif isinstance(value, list):

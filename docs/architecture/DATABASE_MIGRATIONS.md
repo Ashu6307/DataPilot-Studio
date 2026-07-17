@@ -9,3 +9,15 @@ The M1A baseline is recognised from its existing tables and recorded as version 
 Workflow JSON uses a separate pure migration chain. M2B advances compatible
 workflow envelopes from `1.2` to `1.3`, adding reconciliation workflow identity
 and version fields without mutating prior mapping or composition definitions.
+# Milestone 3A additions
+
+SQLite schema version 5 adds versioned DAG workflows/subflows, execution plans,
+runs, node attempts, artifact metadata, manual checkpoints, immutable decision
+events, and evidence-package versions. Ordered schema version 6 adds persisted
+M2B reconciliation-result artifact links for review-aware regeneration. Upgrade from version 4 is backup-first and
+transactional; failure leaves the version row and partial tables rolled back.
+
+Portable workflow schema 1.4 migrates from 1.3 by adding nullable
+`dag_workflow_id` and `dag_workflow_version` references. File migration writes a
+timestamped backup, validates a temporary file, and atomically replaces the
+source only after success. Downgrades and future unknown versions are rejected.

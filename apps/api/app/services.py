@@ -221,9 +221,7 @@ class DataPilotService:
     def run_composition_background(self, submission: CompositionJobSubmission, control: JobControl) -> RunRecord:
         plan = submission.run.plan
         explicit_tables = {
-            source.source_id: source.table_id
-            for source in plan.alignment.sources
-            if source.table_id is not None
+            source.source_id: source.table_id for source in plan.alignment.sources if source.table_id is not None
         }
         catalog = self.batch_catalog(
             BatchCatalogRequest(

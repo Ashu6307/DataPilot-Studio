@@ -63,8 +63,8 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Deferred
 | 15 | FR-15-08 | Info/warning/error severities | Validation | M1 | Implemented | `test_validators.py` | Adds blocking per brief |
 | 16 | FR-16-01..08 | Staged exact/tolerance/fuzzy reconciliation and review outputs | Reconciliation | M2B | Implemented | `test_reconciliation_engine.py`, `test_reconciliation_vertical_slice.py`, `test_reconciliation_persistence.py` | Ordered waterfall, budgets, transparent scores, review events and evidence outputs |
 | 17 | FR-17-01..07 | Key-based workbook/data comparison and review outputs | Comparison | M2B | Implemented | `test_key_comparison_is_order_independent_and_reports_all_categories`, `test_structure_comparison_reuses_schema_drift_and_reports_key_uniqueness` | Dynamic keys, field differences, structure drift reuse and summaries |
-| 18 | FR-18-01..08 | Typed visual workflows, modes, progress/cancel/checkpoints/versioning | Workflow platform | M1B/M3 | Partial | `test_background_jobs.py`, Playwright | Linear typed flow, progress, cancel, checkpoints, and versioning now; visual DAG remains M3 |
-| 19 | FR-19-01..07 | Triggers/schedules/stability/retry/dependencies/queues/recovery | Orchestration | M1B/M3 | Partial | `test_background_jobs.py` | Persistent local queue, safe retry, and restart recovery now; triggers/schedules remain M3 |
+| 18 | FR-18-01..08 | Typed visual workflows, modes, progress/cancel/checkpoints/versioning | Workflow platform | M3A | Implemented | `test_workflow_dag.py`, `test_dag_runtime.py`, Playwright visual DAG journey | Typed canvas, validation, plan, versions, background state, checkpoints and history |
+| 19 | FR-19-01..07 | Triggers/schedules/stability/retry/dependencies/queues/recovery | Orchestration | M1B/M3 | Partial | `test_background_jobs.py`, `test_dag_runtime.py` | DAG dependencies, deterministic retry and recovery implemented; schedules/triggers remain deferred |
 | 20 | FR-20-01..07 | Workbook productivity, formulas, health and formatting | Excel tools | M2+ | Deferred | future workbook corpus | Export formatting only |
 | 21 | FR-21-01 | Excel detail/summary/error/audit export | Export | M1 | Implemented | `test_vertical_slice.py` | Required pack |
 | 21 | FR-21-02 | Dynamic order/formats/widths/filters/freeze/conditional | Export | M1 | Implemented | `test_vertical_slice.py` | Safe limits and error highlighting |
@@ -83,8 +83,8 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Deferred
 | 25 | FR-25-05 | Signed packages | Plugin runtime | M6 | Deferred | future signature tests | Not in slice |
 | 25 | FR-25-06 | Test harness/fixtures | Plugin SDK | M0 | Implemented | `test_plugin_contracts.py` | Contract fixture |
 | 25 | FR-25-07 | Failure boundaries/diagnostics | Plugin runtime | M6 | Deferred | future isolation tests | Interface errors only |
-| 26 | PRD-UX-01 | Guided, dense, accessible and recoverable workspace/screens | Web | M1/M1B | Partial | Vitest + Playwright | Guided slice responsive; autosave/dark/advanced grids M1B |
-| 27-30 | PRD-ARCH-01 | Modular monolith, typed API, storage, security, reliability/observability | Platform | M0+ | Partial | API/safety tests | Local foundation implemented; cloud/RBAC/signing/checkpoints deferred |
+| 26 | PRD-UX-01 | Guided, dense, accessible and recoverable workspace/screens | Web | M3A | Partial | Vitest + Playwright | Responsive typed DAG canvas, keyboard palette, autosave, problems, plan and run states; broader product theming remains later |
+| 27-30 | PRD-ARCH-01 | Modular monolith, typed API, storage, security, reliability/observability | Platform | M0+ | Partial | API/safety/DAG runtime tests | Local typed orchestration and checkpoints implemented; cloud/RBAC/signing remain deferred |
 | 31 | PRD-QA-01 | Multi-layer tests and release gates | Quality | M0+ | Implemented | all test suites | Initial gates pass; upgrade/security/perf expand by phase |
 | 32 | PRD-COM-01 | Trustworthy licensing/packaging | Commercial | M4 | Documentation only | future commercial gates | No enforcement in slice |
 | 33-36 | PRD-ROADMAP-01 | Phased delivery, DoD, support, risks | Planning | M0 | Documentation only | traceability review | Roadmap adopted |
@@ -92,8 +92,8 @@ Status values: **Implemented** (code plus passing test), **Partial**, **Deferred
 | 37 | US-011..024 | P1 profiles/drift/advanced ops/reports/visual workflow/support | Core/advanced | M1/M2/M3 | Partial | per-module future suites | Save profile now; remainder staged |
 | 37 | US-025..035 | P2 scheduler/connectors/dashboard/team/license/update/AI | Later platform | M3-M6 | Deferred | future phase tests | Explicit deferral |
 | 37 | US-036..040 | P3 plugins/marketplace/cloud/SSO/audit ledger | Ecosystem | M6 | Deferred | future enterprise tests | Explicit deferral |
-| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | `test_vertical_slice.py`, `test_composition_vertical_slice.py`, `test_reconciliation_vertical_slice.py`, Playwright | M2B adds dynamic reconciliation budgets, review audit and immutable inputs; later commercial modules retain criteria |
-| 39-42 | PRD-KICKOFF-01 | Reference workflows, sequence, fixtures, API, review gates | Delivery | M0/M2B | Implemented | all current suites | Five ingestion and five reconciliation profiles, dynamic fixtures, API, UI, and release gates covered |
+| 38 | PRD-SYSAC-01 | System-wide dynamic/safety/audit/error/accessibility criteria | Whole product | M1+ | Partial | vertical, DAG, migration and Playwright suites | M3A adds typed graph budgets, immutable decisions, artifact isolation, keyboard canvas and actionable states |
+| 39-42 | PRD-KICKOFF-01 | Reference workflows, sequence, fixtures, API, review gates | Delivery | M0/M3A | Implemented | all current suites and `test_dag_templates.py` | Five ingestion, reconciliation and visual DAG profiles plus APIs, UI and release gates |
 
 ## Review rule
 

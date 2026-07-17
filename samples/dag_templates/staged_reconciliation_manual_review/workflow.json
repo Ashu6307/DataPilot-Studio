@@ -1,0 +1,460 @@
+{
+  "schema_version": "3a.1",
+  "compatibility_version": 3,
+  "id": "32000000-0000-4000-8000-000000000004",
+  "version": 1,
+  "project_id": "30000000-0000-4000-8000-000000000001",
+  "display_name": "Staged Reconciliation with Manual Review",
+  "description": "Anonymised, configuration-driven Milestone 3A visual workflow template.",
+  "lifecycle": "published",
+  "owner_reference": "local-user",
+  "tags": [
+    "template",
+    "anonymised",
+    "milestone-3a"
+  ],
+  "input_parameters": [
+    {
+      "id": "left_source",
+      "label": "Left canonical dataset",
+      "description": "",
+      "data_type": "text",
+      "required": true,
+      "default_value": "31000000-0000-4000-8000-000000000006",
+      "allowed_values": [],
+      "validation": {
+        "minimum": null,
+        "maximum": null,
+        "minimum_length": null,
+        "maximum_length": null,
+        "pattern": null
+      },
+      "secret": false,
+      "override_policy": "allow"
+    },
+    {
+      "id": "right_source",
+      "label": "Right canonical dataset",
+      "description": "",
+      "data_type": "text",
+      "required": true,
+      "default_value": "31000000-0000-4000-8000-000000000007",
+      "allowed_values": [],
+      "validation": {
+        "minimum": null,
+        "maximum": null,
+        "minimum_length": null,
+        "maximum_length": null,
+        "pattern": null
+      },
+      "secret": false,
+      "override_policy": "allow"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "left_dataset",
+      "node_type_id": "source.saved_dataset",
+      "node_version": 1,
+      "display_name": "Saved canonical dataset",
+      "category": "source",
+      "position": {
+        "x": 60.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "source_id": "${parameters.left_source}",
+        "overrides": {}
+      },
+      "input_ports": [],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.source.saved_dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "right_dataset",
+      "node_type_id": "source.saved_dataset",
+      "node_version": 1,
+      "display_name": "Saved canonical dataset",
+      "category": "source",
+      "position": {
+        "x": 60.0,
+        "y": 340.0
+      },
+      "configuration": {
+        "source_id": "${parameters.right_source}",
+        "overrides": {}
+      },
+      "input_ports": [],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.source.saved_dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "staged_reconciliation",
+      "node_type_id": "reconciliation.staged",
+      "node_version": 1,
+      "display_name": "Staged reconciliation",
+      "category": "comparison_reconciliation",
+      "position": {
+        "x": 390.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "schema_version": "2b.1",
+        "id": "22000000-0000-4000-8000-000000000002",
+        "version": 1,
+        "project_id": "20000000-0000-4000-8000-000000000002",
+        "display_name": "Vendor Invoice Reconciliation",
+        "left_dataset_id": "21000000-0000-4000-8000-000000000003",
+        "right_dataset_id": "21000000-0000-4000-8000-000000000004",
+        "evidence_fields": [
+          "document_id",
+          "party_name",
+          "amount",
+          "event_date",
+          "region"
+        ],
+        "stages": [
+          {
+            "schema_version": "2b.1",
+            "id": "exact_document",
+            "name": "Exact document",
+            "priority": 1,
+            "left_key_fields": [
+              "document_id"
+            ],
+            "right_key_fields": [
+              "document_id"
+            ],
+            "method": "exact"
+          },
+          {
+            "schema_version": "2b.1",
+            "id": "amount_date",
+            "name": "Amount and date tolerance",
+            "priority": 2,
+            "left_key_fields": [
+              "amount",
+              "event_date"
+            ],
+            "right_key_fields": [
+              "amount",
+              "event_date"
+            ],
+            "method": "combined_exact_tolerance",
+            "threshold": "0.5",
+            "numeric_tolerances": {
+              "amount": {
+                "mode": "currency_amount",
+                "tolerance": "5.00"
+              }
+            },
+            "date_tolerances": {
+              "event_date": {
+                "mode": "calendar_days",
+                "days": 2
+              }
+            },
+            "candidate_constraints": [
+              {
+                "id": "same_region",
+                "method": "exact",
+                "left_field": "region",
+                "right_field": "region"
+              }
+            ]
+          },
+          {
+            "schema_version": "2b.1",
+            "id": "fuzzy_party",
+            "name": "Fuzzy party candidate",
+            "priority": 3,
+            "left_key_fields": [
+              "party_name"
+            ],
+            "right_key_fields": [
+              "party_name"
+            ],
+            "method": "fuzzy_text",
+            "threshold": "0.85",
+            "candidate_constraints": [
+              {
+                "id": "same_region_fuzzy",
+                "method": "exact",
+                "left_field": "region",
+                "right_field": "region"
+              }
+            ],
+            "fuzzy_fields": [
+              {
+                "left_field": "party_name",
+                "right_field": "party_name",
+                "method": "token_set_similarity",
+                "threshold": "0.85"
+              }
+            ]
+          }
+        ]
+      },
+      "input_ports": [
+        {
+          "id": "left",
+          "display_name": "Left",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "id": "right",
+          "display_name": "Right",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "result",
+          "display_name": "Result",
+          "artifact_type": "reconciliation_result",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.reconciliation.staged",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "manual_review",
+      "node_type_id": "reconciliation.manual_review",
+      "node_version": 1,
+      "display_name": "Manual review checkpoint",
+      "category": "comparison_reconciliation",
+      "position": {
+        "x": 680.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "checkpoint_type": "reconciliation_review",
+        "reason": "Review ambiguous candidates before evidence publication."
+      },
+      "input_ports": [
+        {
+          "id": "result",
+          "display_name": "Result",
+          "artifact_type": "reconciliation_result",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "decisions",
+          "display_name": "Decisions",
+          "artifact_type": "review_decisions",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "id": "result",
+          "display_name": "Result",
+          "artifact_type": "reconciliation_result",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "manual_review_required",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.reconciliation.manual_review",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "evidence_package",
+      "node_type_id": "output.zip_evidence",
+      "node_version": 1,
+      "display_name": "ZIP evidence package",
+      "category": "output",
+      "position": {
+        "x": 980.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "filename_prefix": "reconciliation_evidence",
+        "include_manifest": true
+      },
+      "input_ports": [
+        {
+          "id": "input",
+          "display_name": "Input",
+          "artifact_type": "any",
+          "required": true,
+          "multiple": true
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "package",
+          "display_name": "Package",
+          "artifact_type": "evidence_package",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.output.zip_evidence",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "edges": [
+    {
+      "id": "left_reconcile",
+      "source_node_id": "left_dataset",
+      "source_port_id": "dataset",
+      "target_node_id": "staged_reconciliation",
+      "target_port_id": "left",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "right_reconcile",
+      "source_node_id": "right_dataset",
+      "source_port_id": "dataset",
+      "target_node_id": "staged_reconciliation",
+      "target_port_id": "right",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "reconcile_review",
+      "source_node_id": "staged_reconciliation",
+      "source_port_id": "result",
+      "target_node_id": "manual_review",
+      "target_port_id": "result",
+      "condition": null,
+      "data_contract_reference": "reconciliation_result/v1"
+    },
+    {
+      "id": "review_result_package",
+      "source_node_id": "manual_review",
+      "source_port_id": "result",
+      "target_node_id": "evidence_package",
+      "target_port_id": "input",
+      "condition": null,
+      "data_contract_reference": "reconciliation_result/v1"
+    },
+    {
+      "id": "review_decisions_package",
+      "source_node_id": "manual_review",
+      "source_port_id": "decisions",
+      "target_node_id": "evidence_package",
+      "target_port_id": "input",
+      "condition": null,
+      "data_contract_reference": "review_decisions/v1"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "primary_output",
+      "display_name": "Primary evidence output",
+      "node_id": "evidence_package",
+      "port_id": "package",
+      "artifact_type": "evidence_package",
+      "required": true
+    }
+  ],
+  "multiple_start_policy": "allow",
+  "retry_policy": {
+    "maximum_attempts": 1,
+    "retry_deterministic_failures": true,
+    "retry_delay_seconds": 0
+  },
+  "cancellation_policy": {
+    "cooperative": true,
+    "preserve_completed_checkpoints": true,
+    "publish_partial_outputs": false
+  },
+  "resource_policy": {
+    "maximum_nodes": 250,
+    "maximum_edges": 1000,
+    "maximum_subflow_depth": 5,
+    "maximum_concurrent_ready_nodes": 4,
+    "maximum_payload_bytes": 2000000,
+    "maximum_parameter_bytes": 100000,
+    "maximum_run_history": 1000,
+    "checkpoint_retention_days": 30
+  },
+  "audit_policy": {
+    "record_parameters": true,
+    "exclude_sensitive_parameters": true,
+    "record_branch_decisions": true,
+    "record_node_metrics": true,
+    "record_artifact_fingerprints": true
+  },
+  "change_note": "Published anonymised template version 1",
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z"
+}

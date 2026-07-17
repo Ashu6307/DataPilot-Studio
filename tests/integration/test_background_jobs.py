@@ -24,9 +24,7 @@ def _submission(workflow: WorkflowConfiguration) -> JobSubmission:
     return JobSubmission(run=RunRequest(source_id=uuid4(), workflow=workflow))
 
 
-def _wait(
-    store: SQLiteJobStore, job_id: UUID, statuses: set[RunStatus]
-) -> BackgroundJobRecord:
+def _wait(store: SQLiteJobStore, job_id: UUID, statuses: set[RunStatus]) -> BackgroundJobRecord:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         job = store.get(job_id)
@@ -37,9 +35,7 @@ def _wait(
     raise AssertionError(f"job did not reach {statuses}")
 
 
-def _run_record(
-    submission: JobSubmission, status: RunStatus = RunStatus.SUCCEEDED
-) -> RunRecord:
+def _run_record(submission: JobSubmission, status: RunStatus = RunStatus.SUCCEEDED) -> RunRecord:
     workflow = submission.run.workflow
     return RunRecord(
         project_id=workflow.project_id,
@@ -54,9 +50,7 @@ def _run_record(
     )
 
 
-def test_background_job_lifecycle_progress_and_checkpoint(
-    workflow: WorkflowConfiguration, tmp_path: Path
-) -> None:
+def test_background_job_lifecycle_progress_and_checkpoint(workflow: WorkflowConfiguration, tmp_path: Path) -> None:
     database = Database(tmp_path / "metadata.sqlite3")
     database.initialize()
     store = SQLiteJobStore(database)
@@ -91,9 +85,7 @@ def test_background_job_lifecycle_progress_and_checkpoint(
         executor.shutdown()
 
 
-def test_cancellation_never_becomes_successful(
-    workflow: WorkflowConfiguration, tmp_path: Path
-) -> None:
+def test_cancellation_never_becomes_successful(workflow: WorkflowConfiguration, tmp_path: Path) -> None:
     database = Database(tmp_path / "metadata.sqlite3")
     database.initialize()
     store = SQLiteJobStore(database)
@@ -120,9 +112,7 @@ def test_cancellation_never_becomes_successful(
         executor.shutdown()
 
 
-def test_failure_retry_policy_and_restart_recovery(
-    workflow: WorkflowConfiguration, tmp_path: Path
-) -> None:
+def test_failure_retry_policy_and_restart_recovery(workflow: WorkflowConfiguration, tmp_path: Path) -> None:
     database = Database(tmp_path / "metadata.sqlite3")
     database.initialize()
     store = SQLiteJobStore(database)

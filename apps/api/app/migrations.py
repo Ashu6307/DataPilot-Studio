@@ -127,6 +127,73 @@ CREATE INDEX IF NOT EXISTS idx_review_events_item ON review_decision_events(revi
 CREATE INDEX IF NOT EXISTS idx_decision_memory_project ON decision_memory(project_id, active, kind);
 """
 
+M3A_DAG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS dag_workflows (
+    id TEXT NOT NULL, version INTEGER NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id),
+    display_name TEXT NOT NULL, lifecycle TEXT NOT NULL, definition_json TEXT NOT NULL,
+    parent_version INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY (id, version)
+);
+CREATE TABLE IF NOT EXISTS dag_execution_plans (
+    id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, workflow_version INTEGER NOT NULL,
+    plan_fingerprint TEXT NOT NULL, parameter_fingerprint TEXT NOT NULL,
+    plan_json TEXT NOT NULL, created_at TEXT NOT NULL,
+    FOREIGN KEY (workflow_id, workflow_version) REFERENCES dag_workflows(id, version)
+);
+CREATE TABLE IF NOT EXISTS dag_runs (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+    workflow_id TEXT NOT NULL, workflow_version INTEGER NOT NULL,
+    plan_id TEXT NOT NULL REFERENCES dag_execution_plans(id), status TEXT NOT NULL,
+    request_json TEXT NOT NULL, record_json TEXT NOT NULL,
+    started_at TEXT, completed_at TEXT, created_at TEXT NOT NULL,
+    FOREIGN KEY (workflow_id, workflow_version) REFERENCES dag_workflows(id, version)
+);
+CREATE TABLE IF NOT EXISTS dag_node_runs (
+    id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES dag_runs(id) ON DELETE CASCADE,
+    node_id TEXT NOT NULL, attempt INTEGER NOT NULL, status TEXT NOT NULL,
+    record_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE (run_id, node_id, attempt)
+);
+CREATE TABLE IF NOT EXISTS dag_artifacts (
+    id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES dag_runs(id) ON DELETE CASCADE,
+    producer_node_id TEXT NOT NULL, artifact_type TEXT NOT NULL, sha256 TEXT,
+    path_reference TEXT, metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dag_manual_checkpoints (
+    id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES dag_runs(id) ON DELETE CASCADE,
+    node_id TEXT NOT NULL, status TEXT NOT NULL, checkpoint_json TEXT NOT NULL,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dag_checkpoint_decisions (
+    id TEXT PRIMARY KEY, checkpoint_id TEXT NOT NULL REFERENCES dag_manual_checkpoints(id),
+    action TEXT NOT NULL, actor TEXT NOT NULL, supersedes_event_id TEXT REFERENCES dag_checkpoint_decisions(id),
+    decision_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dag_subflows (
+    id TEXT NOT NULL, version INTEGER NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id),
+    display_name TEXT NOT NULL, definition_json TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (id, version)
+);
+CREATE TABLE IF NOT EXISTS dag_evidence_packages (
+    id TEXT PRIMARY KEY, run_id TEXT NOT NULL, package_version INTEGER NOT NULL,
+    previous_package_id TEXT REFERENCES dag_evidence_packages(id), sha256 TEXT NOT NULL,
+    manifest_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE (run_id, package_version)
+);
+CREATE INDEX IF NOT EXISTS idx_dag_workflows_project ON dag_workflows(project_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_dag_plans_workflow ON dag_execution_plans(workflow_id, workflow_version, created_at);
+CREATE INDEX IF NOT EXISTS idx_dag_runs_project_status ON dag_runs(project_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_dag_node_runs_run ON dag_node_runs(run_id, node_id, attempt);
+CREATE INDEX IF NOT EXISTS idx_dag_artifacts_run ON dag_artifacts(run_id, producer_node_id);
+CREATE INDEX IF NOT EXISTS idx_dag_checkpoints_run_status ON dag_manual_checkpoints(run_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_dag_checkpoint_decisions ON dag_checkpoint_decisions(checkpoint_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dag_subflows_project ON dag_subflows(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dag_evidence_run ON dag_evidence_packages(run_id, package_version);
+"""
+
+M3A_EVIDENCE_LINKAGE_SCHEMA = """
+ALTER TABLE reconciliation_runs ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]';
+"""
+
 VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL
@@ -150,6 +217,8 @@ MIGRATIONS = (
     Migration(2, "milestone_1b_jobs_checkpoints_mapping_history", M1B_JOB_SCHEMA),
     Migration(3, "milestone_2a_composition_metadata", M2A_COMPOSITION_SCHEMA),
     Migration(4, "milestone_2b_reconciliation_metadata", M2B_RECONCILIATION_SCHEMA),
+    Migration(5, "milestone_3a_typed_workflow_dag_metadata", M3A_DAG_SCHEMA),
+    Migration(6, "milestone_3a_reconciliation_evidence_linkage", M3A_EVIDENCE_LINKAGE_SCHEMA),
 )
 
 

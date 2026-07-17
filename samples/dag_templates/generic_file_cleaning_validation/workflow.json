@@ -1,0 +1,289 @@
+{
+  "schema_version": "3a.1",
+  "compatibility_version": 3,
+  "id": "32000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "project_id": "30000000-0000-4000-8000-000000000001",
+  "display_name": "Generic File Cleaning and Validation",
+  "description": "Anonymised, configuration-driven Milestone 3A visual workflow template.",
+  "lifecycle": "published",
+  "owner_reference": "local-user",
+  "tags": [
+    "template",
+    "anonymised",
+    "milestone-3a"
+  ],
+  "input_parameters": [
+    {
+      "id": "source_id",
+      "label": "Canonical source",
+      "description": "",
+      "data_type": "text",
+      "required": true,
+      "default_value": "31000000-0000-4000-8000-000000000001",
+      "allowed_values": [],
+      "validation": {
+        "minimum": null,
+        "maximum": null,
+        "minimum_length": null,
+        "maximum_length": null,
+        "pattern": null
+      },
+      "secret": false,
+      "override_policy": "allow"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "source",
+      "node_type_id": "source.saved_dataset",
+      "node_version": 1,
+      "display_name": "Saved canonical dataset",
+      "category": "source",
+      "position": {
+        "x": 80.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "source_id": "${parameters.source_id}",
+        "overrides": {}
+      },
+      "input_ports": [],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.source.saved_dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "trim_identifier",
+      "node_type_id": "cleaning.operation",
+      "node_version": 1,
+      "display_name": "Cleaning operation",
+      "category": "cleaning",
+      "position": {
+        "x": 360.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "operation_id": "text.trim",
+        "operation_version": 1,
+        "config": {
+          "field_id": "record_id"
+        },
+        "enabled": true
+      },
+      "input_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.cleaning.operation",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "validate",
+      "node_type_id": "validation.rules",
+      "node_version": 1,
+      "display_name": "Validation rules",
+      "category": "validation",
+      "position": {
+        "x": 650.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "rules": []
+      },
+      "input_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "id": "findings",
+          "display_name": "Findings",
+          "artifact_type": "validation_findings",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.validation.rules",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "excel_evidence",
+      "node_type_id": "output.excel",
+      "node_version": 1,
+      "display_name": "Excel export",
+      "category": "output",
+      "position": {
+        "x": 930.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "filename_prefix": "clean_validation_evidence"
+      },
+      "input_ports": [
+        {
+          "id": "input",
+          "display_name": "Input",
+          "artifact_type": "any",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "package",
+          "display_name": "Package",
+          "artifact_type": "evidence_package",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.output.excel",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "edges": [
+    {
+      "id": "source_clean",
+      "source_node_id": "source",
+      "source_port_id": "dataset",
+      "target_node_id": "trim_identifier",
+      "target_port_id": "dataset",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "clean_validate",
+      "source_node_id": "trim_identifier",
+      "source_port_id": "dataset",
+      "target_node_id": "validate",
+      "target_port_id": "dataset",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "validate_excel",
+      "source_node_id": "validate",
+      "source_port_id": "dataset",
+      "target_node_id": "excel_evidence",
+      "target_port_id": "input",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "primary_output",
+      "display_name": "Primary evidence output",
+      "node_id": "excel_evidence",
+      "port_id": "package",
+      "artifact_type": "evidence_package",
+      "required": true
+    }
+  ],
+  "multiple_start_policy": "allow",
+  "retry_policy": {
+    "maximum_attempts": 1,
+    "retry_deterministic_failures": true,
+    "retry_delay_seconds": 0
+  },
+  "cancellation_policy": {
+    "cooperative": true,
+    "preserve_completed_checkpoints": true,
+    "publish_partial_outputs": false
+  },
+  "resource_policy": {
+    "maximum_nodes": 250,
+    "maximum_edges": 1000,
+    "maximum_subflow_depth": 5,
+    "maximum_concurrent_ready_nodes": 4,
+    "maximum_payload_bytes": 2000000,
+    "maximum_parameter_bytes": 100000,
+    "maximum_run_history": 1000,
+    "checkpoint_retention_days": 30
+  },
+  "audit_policy": {
+    "record_parameters": true,
+    "exclude_sensitive_parameters": true,
+    "record_branch_decisions": true,
+    "record_node_metrics": true,
+    "record_artifact_fingerprints": true
+  },
+  "change_note": "Published anonymised template version 1",
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z"
+}

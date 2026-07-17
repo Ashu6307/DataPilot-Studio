@@ -1,6 +1,6 @@
 # DataPilot Studio
 
-DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 2B adds arbitrary key-based dataset and structure comparison, composite referential integrity, audited key normalisation, staged exact/tolerance/fuzzy/weighted reconciliation, governed manual review, decision memory, and deterministic evidence packages through a background-enabled Reconciliation Studio.
+DataPilot Studio is a local-first, metadata-driven data automation workspace. Milestone 3A adds a versioned typed workflow DAG, closed capability registry, visual canvas, static validation, deterministic planning, runtime parameters, conditional routing, reusable subflows, background node execution, manual checkpoints, workflow diffs, and review-aware evidence regeneration while preserving the completed M1/M2 engines.
 
 The source of truth is `docs/product/DataPilot_Studio_Commercial_PRD_v1.0.pdf`. Milestone scope and requirement status are recorded in `docs/planning/PRD_TRACEABILITY_MATRIX.md`.
 
@@ -54,6 +54,8 @@ python scripts/benchmark_m1b.py
 python scripts/benchmark_export.py
 python scripts/benchmark_m2a.py
 python scripts/benchmark_m2b.py
+python scripts/generate_dag_templates.py
+python -m scripts.benchmark_m3a
 ```
 
 ## Reconciliation Studio
@@ -65,10 +67,20 @@ full background run. Successful runs expose Excel, CSV, JSON, and deterministic
 ZIP evidence. Ambiguous candidates remain pending until an append-only review
 decision is recorded.
 
+## Visual Workflow Studio
+
+Create a project and open **Visual workflow studio**. Use the searchable palette
+or one of five anonymised templates, connect typed ports, configure nodes,
+validate the graph, inspect its deterministic execution plan, save/publish a
+version, and submit the full run to background execution. The problems, plan,
+and runs panels expose reason codes, parallel groups, checkpoints, progress,
+cancel state, and recovery state. Published versions are immutable; edits create
+reviewable new versions through the DAG API.
+
 ## Runtime safety
 
 Runtime uploads, projects, run folders, outputs, and SQLite metadata are created below `.datapilot/` by default and are ignored by Git. Inputs are copied into an isolated read-only-style source area, fingerprinted, and checked again after processing. Outputs receive unique timestamped names and are never written over source paths.
 
 ## Scope
 
-Implemented work covers Milestones 0, 1A, 1B, 2A, and 2B. Schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.
+Implemented work covers Milestones 0, 1A, 1B, 2A, 2B, and 3A. Schedulers/triggers, cloud/team capabilities, licensing enforcement, third-party plugin loading, AI, and desktop packaging are intentionally deferred.

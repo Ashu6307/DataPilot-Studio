@@ -3,11 +3,12 @@ import {
   Clock3, Database, Download, FileOutput, FileSearch, Fingerprint, FolderPlus, History,
   Calculator, GitCompareArrows, Layers3, ListChecks, LoaderCircle, Map as MapIcon, Menu, Play,
   Plus, Save, Settings2, ShieldCheck,
-  SlidersHorizontal, Sparkles, Table2, UploadCloud, WandSparkles, X, XCircle,
+  SlidersHorizontal, Sparkles, Table2, UploadCloud, WandSparkles, Workflow as WorkflowIcon, X, XCircle,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { api } from "./api";
 import { ReconciliationStudio } from "./ReconciliationStudio";
+import { WorkflowStudio } from "./WorkflowStudio";
 import { DataTable } from "./components/DataTable";
 import { MetricCard } from "./components/MetricCard";
 import { StatusChip } from "./components/StatusChip";
@@ -20,6 +21,7 @@ import type {
 
 const stages = [
   { id: "workspace", label: "Workspace", icon: Layers3 },
+  { id: "workflow", label: "Visual workflow studio", icon: WorkflowIcon },
   { id: "composition", label: "Composition studio", icon: Table2 },
   { id: "reconciliation", label: "Reconciliation studio", icon: GitCompareArrows },
   { id: "import", label: "Import dataset", icon: UploadCloud },
@@ -74,7 +76,7 @@ function App() {
 
   function canVisit(target: Stage) {
     if (["workspace", "import", "history"].includes(target)) return true;
-    if (["composition", "reconciliation"].includes(target)) return Boolean(project);
+    if (["workflow", "composition", "reconciliation"].includes(target)) return Boolean(project);
     if (["inspect", "profile"].includes(target)) return Boolean(discovery);
     if (["mapping", "drift", "cleaning", "calculations", "validation", "preview"].includes(target)) return Boolean(workflow);
     if (target === "queue") return Boolean(job);
@@ -170,7 +172,7 @@ function App() {
       reason_code: `${outputId.toUpperCase()}_CALCULATION_FAILED`, description: `${left} ${functionName} ${right}`,
       lineage_enabled: true,
     };
-    setWorkflow({ ...workflow, schema_version: "1.3", calculations: [...workflow.calculations, calculation], updated_at: new Date().toISOString() });
+    setWorkflow({ ...workflow, schema_version: "1.4", calculations: [...workflow.calculations, calculation], updated_at: new Date().toISOString() });
   }
 
   function addRule(ruleType: ValidationRule["rule_type"], fieldId: string) {
@@ -249,6 +251,7 @@ function App() {
           {busy && <div className="busy-banner" role="status"><LoaderCircle className="spin" size={18} />{busy}</div>}
           {error && <div className="error-banner" role="alert"><XCircle size={19} /><div><strong>Action could not be completed</strong><span>{error}</span></div><button onClick={() => setError(null)} aria-label="Dismiss error"><X size={17} /></button></div>}
           {stage === "workspace" && <WorkspaceScreen project={project} runs={runs} onCreate={createProject} onContinue={() => setStage("import")} />}
+          {stage === "workflow" && project && <WorkflowStudio project={project} source={source} />}
           {stage === "composition" && project && <CompositionStudioScreen project={project} />}
           {stage === "reconciliation" && project && <ReconciliationStudio project={project} />}
           {stage === "import" && <ImportScreen project={project} source={source} onCreate={createProject} onUpload={upload} onContinue={() => discovery && setStage("inspect")} />}
@@ -490,7 +493,7 @@ function buildWorkflow(project: Project, source: SourceHandle, table: TableDisco
     { id: "TYPE_1", rule_type: "data_type", field_id: requiredField, severity: "warning", reason_code: "DATA_TYPE_INVALID", message: `${requiredField} does not match its canonical type`, config: { data_type: canonical_fields.find((field) => field.id===requiredField)?.data_type ?? "text" } },
     { id: "LENGTH_1", rule_type: "text_length", field_id: textField, severity: "warning", reason_code: "TEXT_LENGTH_INVALID", message: `${textField} exceeds the configured length`, config: { min: 0, max: 120 } },
   ];
-  return { schema_version:"1.3", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_rows:table.selected_header_rows, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, calculations:[], composition_plan_id:null, composition_plan_version:null, reconciliation_workflow_id:null, reconciliation_workflow_version:null, validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
+  return { schema_version:"1.4", compatibility_version:1, id:crypto.randomUUID(), workflow_version:1, project_id:project.id, display_name:`${project.name} · ${source.original_filename}`, source_connector:source.original_filename.toLowerCase().endsWith(".csv")?"file.csv":"file.excel", discovery_overrides:{ sheet_name:table.sheet_name, header_row:table.selected_header_row, header_rows:table.selected_header_rows, header_search_depth:25, preview_rows:25 }, mapping:{ id:crypto.randomUUID(), version:1, canonical_fields, mappings, created_at:now, created_by:"local-user" }, operations:defaultOps, calculations:[], composition_plan_id:null, composition_plan_version:null, reconciliation_workflow_id:null, reconciliation_workflow_version:null, dag_workflow_id:null, dag_workflow_version:null, validation_rules:defaultRules, export:{ filename_prefix:"datapilot_output", include_summary:true, include_rejected_rows:true, include_source_metadata:true }, created_at:now, updated_at:now, change_note:"Initial guided workflow" };
 }
 
 function messageOf(reason: unknown) { return reason instanceof Error ? reason.message.replace(/^\{"detail":"?|"?\}$/g, "") : "Unexpected local error"; }

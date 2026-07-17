@@ -52,6 +52,7 @@ class MetadataRepository(Protocol):
     def save_folder_catalog(self, catalog: BatchCatalog, configuration_json: str) -> BatchCatalog: ...
     def save_reconciliation_workflow(self, workflow: ReconciliationWorkflow) -> ReconciliationWorkflow: ...
     def list_reconciliation_workflows(self, project_id: UUID) -> list[ReconciliationWorkflow]: ...
+    def get_reconciliation_workflow(self, workflow_id: UUID, version: int) -> ReconciliationWorkflow | None: ...
     def save_reconciliation_run(self, run: ReconciliationRunRecord) -> ReconciliationRunRecord: ...
     def get_reconciliation_run(self, run_id: UUID) -> ReconciliationRunRecord | None: ...
     def save_review_items(self, items: list[ReviewQueueItem]) -> list[ReviewQueueItem]: ...
@@ -62,9 +63,7 @@ class MetadataRepository(Protocol):
     def list_decision_memory(self, project_id: UUID, active_only: bool = True) -> list[DecisionMemory]: ...
     def deactivate_decision_memory(self, memory_id: UUID, actor: str, reason: str) -> DecisionMemory: ...
     def export_decision_memory(self, project_id: UUID, actor: str) -> list[DecisionMemory]: ...
-    def save_reconciliation_manifest(
-        self, manifest: ReconciliationExportManifest
-    ) -> ReconciliationExportManifest: ...
+    def save_reconciliation_manifest(self, manifest: ReconciliationExportManifest) -> ReconciliationExportManifest: ...
     def get_reconciliation_manifest(self, run_id: UUID) -> ReconciliationExportManifest | None: ...
 
 
@@ -280,16 +279,27 @@ class SQLiteMetadataRepository:
     def list_reconciliation_workflows(self, project_id: UUID) -> list[ReconciliationWorkflow]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT configuration_json FROM reconciliation_workflows "
-                "WHERE project_id = ? ORDER BY created_at DESC",
+                "SELECT configuration_json FROM reconciliation_workflows WHERE project_id = ? ORDER BY created_at DESC",
                 (str(project_id),),
             ).fetchall()
         return [ReconciliationWorkflow.model_validate_json(row["configuration_json"]) for row in rows]
 
+    def get_reconciliation_workflow(self, workflow_id: UUID, version: int) -> ReconciliationWorkflow | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """SELECT configuration_json FROM reconciliation_workflows
+                WHERE id = ? AND version = ?""",
+                (str(workflow_id), version),
+            ).fetchone()
+        return ReconciliationWorkflow.model_validate_json(row["configuration_json"]) if row else None
+
     def save_reconciliation_run(self, run: ReconciliationRunRecord) -> ReconciliationRunRecord:
         with self.database.connect() as connection:
             connection.execute(
-                "INSERT OR REPLACE INTO reconciliation_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                """INSERT OR REPLACE INTO reconciliation_runs
+                (run_id, project_id, workflow_id, workflow_version, status, summary_json,
+                 audit_json, created_at, artifacts_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     str(run.run_id),
                     str(run.project_id),
@@ -299,6 +309,7 @@ class SQLiteMetadataRepository:
                     run.summary.model_dump_json(),
                     json.dumps(run.audit),
                     run.created_at.isoformat(),
+                    json.dumps(run.artifacts),
                 ),
             )
         return run
@@ -307,9 +318,7 @@ class SQLiteMetadataRepository:
         from packages.contracts import ReconciliationSummary
 
         with self.database.connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM reconciliation_runs WHERE run_id = ?", (str(run_id),)
-            ).fetchone()
+            row = connection.execute("SELECT * FROM reconciliation_runs WHERE run_id = ?", (str(run_id),)).fetchone()
         if row is None:
             return None
         return ReconciliationRunRecord(
@@ -320,6 +329,7 @@ class SQLiteMetadataRepository:
             status=row["status"],
             summary=ReconciliationSummary.model_validate_json(row["summary_json"]),
             audit=json.loads(row["audit_json"]),
+            artifacts=json.loads(row["artifacts_json"]),
             created_at=row["created_at"],
         )
 
@@ -423,8 +433,7 @@ class SQLiteMetadataRepository:
     def list_review_decisions(self, review_item_id: UUID) -> list[ReviewDecisionEvent]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT event_json FROM review_decision_events "
-                "WHERE review_item_id = ? ORDER BY created_at",
+                "SELECT event_json FROM review_decision_events WHERE review_item_id = ? ORDER BY created_at",
                 (str(review_item_id),),
             ).fetchall()
         return [ReviewDecisionEvent.model_validate_json(row["event_json"]) for row in rows]
@@ -513,9 +522,7 @@ class SQLiteMetadataRepository:
                 )
         return memories
 
-    def save_reconciliation_manifest(
-        self, manifest: ReconciliationExportManifest
-    ) -> ReconciliationExportManifest:
+    def save_reconciliation_manifest(self, manifest: ReconciliationExportManifest) -> ReconciliationExportManifest:
         with self.database.connect() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO reconciliation_export_manifests VALUES (?, ?, ?)",

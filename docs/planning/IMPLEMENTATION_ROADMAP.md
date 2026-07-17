@@ -32,3 +32,10 @@ Typed visual DAG designer, runtime parameters, subflows, worker queue, scheduler
 ## Milestone 4+ — Commercial/team/ecosystem
 
 Installer/updater/signing/diagnostics/entitlements first; then identities, roles, sharing/private workers; finally isolated signed plugins, marketplace, governed AI, and enterprise connectors. Each begins only after the prior phase’s safety and compatibility gate.
+# Current delivery
+
+Milestones 0, 1A, 1B, 2A, and 2B are protected baselines. Milestone 3A adds the
+typed visual workflow DAG platform described in
+`MILESTONE_3A_VISUAL_WORKFLOW_DAG.md`. The recommended next milestone is 3B:
+scheduled/local triggers, operational run calendars, and notification adapters,
+without broadening into cloud collaboration or AI generation.

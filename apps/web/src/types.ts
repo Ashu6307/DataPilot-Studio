@@ -141,7 +141,7 @@ export interface ValidationRule {
 }
 
 export interface Workflow {
-  schema_version: "1.0" | "1.1" | "1.2" | "1.3";
+  schema_version: "1.0" | "1.1" | "1.2" | "1.3" | "1.4";
   compatibility_version: 1;
   id: string;
   workflow_version: number;
@@ -163,11 +163,206 @@ export interface Workflow {
   composition_plan_version?: number | null;
   reconciliation_workflow_id?: string | null;
   reconciliation_workflow_version?: number | null;
+  dag_workflow_id?: string | null;
+  dag_workflow_version?: number | null;
   validation_rules: ValidationRule[];
   export: { filename_prefix: string; include_summary: boolean; include_rejected_rows: boolean; include_source_metadata: boolean };
   created_at: string;
   updated_at: string;
   change_note: string;
+}
+
+export type DagNodeCategory = "source" | "discovery_mapping" | "cleaning" | "validation" |
+  "calculation" | "composition" | "comparison_reconciliation" | "output" | "control" | "subflow";
+
+export type DagArtifactType = "none" | "source_reference" | "source_collection" | "discovery_metadata" |
+  "canonical_dataset" | "dataset_collection" | "validation_findings" | "comparison_result" |
+  "integrity_result" | "reconciliation_result" | "review_decisions" | "evidence_package" |
+  "manifest" | "control" | "any";
+
+export interface DagPort {
+  id: string;
+  display_name: string;
+  artifact_type: DagArtifactType;
+  required: boolean;
+  multiple: boolean;
+}
+
+export interface NodeCapability {
+  type_id: string;
+  version: number;
+  display_name: string;
+  category: DagNodeCategory;
+  input_ports: DagPort[];
+  output_ports: DagPort[];
+  configuration_schema: string;
+  validation_method: string;
+  preview_supported: boolean;
+  execution_adapter_id: string;
+  cancellation_supported: boolean;
+  checkpoint_supported: boolean;
+  retry_classification: string;
+  audit_fields: string[];
+  entitlement_capability_id: string;
+}
+
+export interface DagWorkflowNode {
+  id: string;
+  node_type_id: string;
+  node_version: number;
+  display_name: string;
+  category: DagNodeCategory;
+  position: { x: number; y: number };
+  configuration: Record<string, unknown>;
+  input_ports: DagPort[];
+  output_ports: DagPort[];
+  retry_classification: string;
+  checkpoint_policy: string;
+  resource_estimate: {
+    estimated_rows: number | null;
+    estimated_memory_bytes: number | null;
+    estimated_candidate_pairs: number | null;
+    warning_seconds: number | null;
+    risk: "low" | "warning" | "block" | "unknown";
+  };
+  entitlement_capability_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DagWorkflowEdge {
+  id: string;
+  source_node_id: string;
+  source_port_id: string;
+  target_node_id: string;
+  target_port_id: string;
+  condition: Record<string, unknown> | null;
+  data_contract_reference: string;
+}
+
+export interface DagWorkflow {
+  schema_version: "3a.1";
+  compatibility_version: 3;
+  id: string;
+  version: number;
+  project_id: string;
+  display_name: string;
+  description: string;
+  lifecycle: "draft" | "published" | "archived";
+  owner_reference: string;
+  tags: string[];
+  input_parameters: Array<Record<string, unknown>>;
+  nodes: DagWorkflowNode[];
+  edges: DagWorkflowEdge[];
+  outputs: Array<{
+    id: string;
+    display_name: string;
+    node_id: string;
+    port_id: string;
+    artifact_type: DagArtifactType;
+    required: boolean;
+  }>;
+  multiple_start_policy: "allow" | "single";
+  retry_policy: { maximum_attempts: number; retry_deterministic_failures: boolean; retry_delay_seconds: number };
+  cancellation_policy: { cooperative: true; preserve_completed_checkpoints: boolean; publish_partial_outputs: false };
+  resource_policy: {
+    maximum_nodes: number; maximum_edges: number; maximum_subflow_depth: number;
+    maximum_concurrent_ready_nodes: number; maximum_payload_bytes: number; maximum_parameter_bytes: number;
+    maximum_run_history: number; checkpoint_retention_days: number;
+  };
+  audit_policy: {
+    record_parameters: boolean; exclude_sensitive_parameters: true; record_branch_decisions: boolean;
+    record_node_metrics: boolean; record_artifact_fingerprints: boolean;
+  };
+  change_note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DagValidationFinding {
+  severity: Severity;
+  reason_code: string;
+  explanation: string;
+  suggested_resolution: string;
+  node_id: string | null;
+  edge_id: string | null;
+  parameter_id: string | null;
+}
+
+export interface DagValidationResult {
+  workflow_id: string;
+  workflow_version: number;
+  valid: boolean;
+  findings: DagValidationFinding[];
+  topological_order: string[];
+  reachable_nodes: string[];
+  validated_at: string;
+}
+
+export interface DagExecutionPlan {
+  id: string;
+  workflow_id: string;
+  workflow_version: number;
+  parameter_fingerprint: string;
+  plan_fingerprint: string;
+  nodes: Array<{
+    node_id: string; sequence: number; dependency_node_ids: string[]; parallel_group: number;
+    retry_classification: string; checkpoint_policy: string; output_consumer_count: number;
+    dead_output_ports: string[]; manual_checkpoint: boolean;
+  }>;
+  estimated_sources: number;
+  estimated_rows: number | null;
+  estimated_candidate_pairs: number | null;
+  estimated_outputs: number;
+  resource_warnings: string[];
+  manual_checkpoint_nodes: string[];
+  non_retryable_nodes: string[];
+  created_at: string;
+}
+
+export interface DagRunRecord {
+  id: string;
+  project_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  plan_id: string;
+  status: "queued" | "planning" | "validating" | "running" | "waiting_for_review" |
+    "cancelling" | "cancelled" | "succeeded" | "partial" | "failed" | "recovery_required";
+  parameter_audit: Record<string, unknown>;
+  current_node_id: string | null;
+  current_parallel_group: number | null;
+  progress_percent: number;
+  cancel_requested: boolean;
+  completed_node_ids: string[];
+  skipped_node_ids: string[];
+  output_manifests: string[];
+  output_available: boolean;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DagManualCheckpoint {
+  id: string;
+  run_id: string;
+  node_id: string;
+  checkpoint_type: string;
+  reason: string;
+  available_actions: Array<"approve" | "reject" | "edit_rerun" | "skip" | "cancel">;
+  status: "waiting" | "approved" | "rejected" | "skipped" | "cancelled" | "expired";
+  decision_event_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DagWorkflowDiff {
+  workflow_id: string;
+  from_version: number;
+  to_version: number;
+  compatible: boolean;
+  items: Array<{ category: string; object_id: string; before: unknown; after: unknown }>;
+  created_at: string;
 }
 
 export type MatchMethod = "exact" | "normalised_exact" | "numeric_tolerance" | "date_tolerance" |

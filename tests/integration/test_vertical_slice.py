@@ -67,9 +67,7 @@ def test_failed_execution_produces_failed_audit_evidence(
         size_bytes=source.size_bytes,
         sha256=source.sha256,
     )
-    broken = workflow.model_copy(
-        update={"operations": [OperationNode(operation_id="processor.not_installed")]}
-    )
+    broken = workflow.model_copy(update={"operations": [OperationNode(operation_id="processor.not_installed")]})
     with pytest.raises(RuntimeExecutionError) as captured:
         EngineRuntime(workspace).execute(source, handle, broken)
     assert captured.value.record.status == "failed"

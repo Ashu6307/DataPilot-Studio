@@ -2,6 +2,8 @@ import type {
   BackgroundJob, BatchCatalog, BatchManifest, CompositionPlan, CompositionPreview, DiscoveryResult,
   PreviewResult, Project, ReconciliationManifest, ReconciliationResult, ReconciliationRunRecord,
   ReconciliationWorkflow, ReviewItem, RunRecord, SchemaDriftResult, SourceHandle, TableDiscovery, Workflow,
+  DagExecutionPlan, DagManualCheckpoint, DagRunRecord, DagValidationResult, DagWorkflow,
+  DagWorkflowDiff, NodeCapability,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -137,4 +139,48 @@ export const api = {
     }),
   listRuns: (projectId?: string) => request<RunRecord[]>(`/runs${projectId ? `?project_id=${projectId}` : ""}`),
   artifactUrl: (runId: string, index = 0) => `${API_BASE}/artifacts/${runId}/${index}`,
+  listDagCapabilities: () => request<NodeCapability[]>("/dag/capabilities"),
+  validateDag: (workflow: DagWorkflow) => request<DagValidationResult>("/dag/validate", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(workflow),
+  }),
+  planDag: (workflow: DagWorkflow) => request<DagExecutionPlan>("/dag/plan", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow, parameters: [] }),
+  }),
+  saveDag: (workflow: DagWorkflow) => request<DagWorkflow>("/dag/workflows", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(workflow),
+  }),
+  publishDag: (workflowId: string, version: number) =>
+    request<DagWorkflow>(`/dag/workflows/${workflowId}/publish?version=${version}`, { method: "POST" }),
+  createDagVersion: (workflowId: string, workflow: DagWorkflow, changeNote: string) =>
+    request<DagWorkflow>(`/dag/workflows/${workflowId}/versions`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow, change_note: changeNote }),
+    }),
+  listDagWorkflowHistory: (workflowId: string) => request<DagWorkflow[]>(`/dag/workflows/${workflowId}/history`),
+  diffDagWorkflows: (before: DagWorkflow, after: DagWorkflow) => request<DagWorkflowDiff>("/dag/diff", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ before, after }),
+  }),
+  cloneDagWorkflow: (workflowId: string, displayName: string) => request<DagWorkflow>(`/dag/workflows/${workflowId}/clone`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ display_name: displayName, owner_reference: "local-user" }),
+  }),
+  restoreDagWorkflow: (workflowId: string, sourceVersion: number) => request<DagWorkflow>(`/dag/workflows/${workflowId}/restore`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_version: sourceVersion, change_note: `Restored version ${sourceVersion} from visual studio` }),
+  }),
+  submitDag: (workflow: DagWorkflow) => request<DagRunRecord>("/dag/runs", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workflow, parameters: [], idempotency_key: crypto.randomUUID() }),
+  }),
+  getDagRun: (runId: string) => request<DagRunRecord>(`/dag/runs/${runId}`),
+  cancelDagRun: (runId: string) => request<DagRunRecord>(`/dag/runs/${runId}/cancel`, { method: "POST" }),
+  resumeDagRun: (runId: string) => request<DagRunRecord>(`/dag/runs/${runId}/resume`, { method: "POST" }),
+  retryDagRun: (runId: string) => request<DagRunRecord>(`/dag/runs/${runId}/retry`, { method: "POST" }),
+  listDagCheckpoints: (runId: string) => request<DagManualCheckpoint[]>(`/dag/runs/${runId}/checkpoints`),
+  decideDagCheckpoint: (checkpointId: string, action: "approve" | "reject") =>
+    request<Record<string, unknown>>(`/dag/checkpoints/${checkpointId}/decisions`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkpoint_id: checkpointId, action, actor: "local-user", comment: "Decision recorded in visual workflow studio" }),
+    }),
+  listDagRuns: (projectId: string) => request<DagRunRecord[]>(`/dag/runs?project_id=${projectId}`),
 };

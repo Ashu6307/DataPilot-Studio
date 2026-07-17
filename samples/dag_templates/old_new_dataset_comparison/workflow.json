@@ -1,0 +1,307 @@
+{
+  "schema_version": "3a.1",
+  "compatibility_version": 3,
+  "id": "32000000-0000-4000-8000-000000000003",
+  "version": 1,
+  "project_id": "30000000-0000-4000-8000-000000000001",
+  "display_name": "Old vs New Dataset Comparison",
+  "description": "Anonymised, configuration-driven Milestone 3A visual workflow template.",
+  "lifecycle": "published",
+  "owner_reference": "local-user",
+  "tags": [
+    "template",
+    "anonymised",
+    "milestone-3a"
+  ],
+  "input_parameters": [
+    {
+      "id": "old_source",
+      "label": "Old dataset",
+      "description": "",
+      "data_type": "text",
+      "required": true,
+      "default_value": "31000000-0000-4000-8000-000000000004",
+      "allowed_values": [],
+      "validation": {
+        "minimum": null,
+        "maximum": null,
+        "minimum_length": null,
+        "maximum_length": null,
+        "pattern": null
+      },
+      "secret": false,
+      "override_policy": "allow"
+    },
+    {
+      "id": "new_source",
+      "label": "New dataset",
+      "description": "",
+      "data_type": "text",
+      "required": true,
+      "default_value": "31000000-0000-4000-8000-000000000005",
+      "allowed_values": [],
+      "validation": {
+        "minimum": null,
+        "maximum": null,
+        "minimum_length": null,
+        "maximum_length": null,
+        "pattern": null
+      },
+      "secret": false,
+      "override_policy": "allow"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "old_dataset",
+      "node_type_id": "source.saved_dataset",
+      "node_version": 1,
+      "display_name": "Saved canonical dataset",
+      "category": "source",
+      "position": {
+        "x": 80.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "source_id": "${parameters.old_source}",
+        "overrides": {}
+      },
+      "input_ports": [],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.source.saved_dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "new_dataset",
+      "node_type_id": "source.saved_dataset",
+      "node_version": 1,
+      "display_name": "Saved canonical dataset",
+      "category": "source",
+      "position": {
+        "x": 80.0,
+        "y": 340.0
+      },
+      "configuration": {
+        "source_id": "${parameters.new_source}",
+        "overrides": {}
+      },
+      "input_ports": [],
+      "output_ports": [
+        {
+          "id": "dataset",
+          "display_name": "Dataset",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.source.saved_dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "compare",
+      "node_type_id": "comparison.dataset",
+      "node_version": 1,
+      "display_name": "Dataset comparison",
+      "category": "comparison_reconciliation",
+      "position": {
+        "x": 430.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "schema_version": "2b.1",
+        "id": "23000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "project_id": "20000000-0000-4000-8000-000000000001",
+        "left_dataset_id": "21000000-0000-4000-8000-000000000001",
+        "right_dataset_id": "21000000-0000-4000-8000-000000000002",
+        "business_key_fields": [
+          "record_key"
+        ],
+        "compare_fields": [
+          "category",
+          "amount"
+        ]
+      },
+      "input_ports": [
+        {
+          "id": "left",
+          "display_name": "Left",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "id": "right",
+          "display_name": "Right",
+          "artifact_type": "canonical_dataset",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "comparison",
+          "display_name": "Comparison",
+          "artifact_type": "comparison_result",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.comparison.dataset",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    },
+    {
+      "id": "comparison_manifest",
+      "node_type_id": "output.json_manifest",
+      "node_version": 1,
+      "display_name": "JSON manifest",
+      "category": "output",
+      "position": {
+        "x": 770.0,
+        "y": 180.0
+      },
+      "configuration": {
+        "filename_prefix": "comparison_manifest"
+      },
+      "input_ports": [
+        {
+          "id": "input",
+          "display_name": "Input",
+          "artifact_type": "any",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_ports": [
+        {
+          "id": "manifest",
+          "display_name": "Manifest",
+          "artifact_type": "manifest",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "retry_classification": "deterministic_retry",
+      "checkpoint_policy": "after_success",
+      "resource_estimate": {
+        "estimated_rows": null,
+        "estimated_memory_bytes": null,
+        "estimated_candidate_pairs": null,
+        "warning_seconds": null,
+        "risk": "unknown"
+      },
+      "entitlement_capability_id": "workflow.node.output.json_manifest",
+      "created_at": "2026-07-17T00:00:00Z",
+      "updated_at": "2026-07-17T00:00:00Z"
+    }
+  ],
+  "edges": [
+    {
+      "id": "old_compare",
+      "source_node_id": "old_dataset",
+      "source_port_id": "dataset",
+      "target_node_id": "compare",
+      "target_port_id": "left",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "new_compare",
+      "source_node_id": "new_dataset",
+      "source_port_id": "dataset",
+      "target_node_id": "compare",
+      "target_port_id": "right",
+      "condition": null,
+      "data_contract_reference": "canonical_dataset/v1"
+    },
+    {
+      "id": "compare_manifest",
+      "source_node_id": "compare",
+      "source_port_id": "comparison",
+      "target_node_id": "comparison_manifest",
+      "target_port_id": "input",
+      "condition": null,
+      "data_contract_reference": "comparison_result/v1"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "primary_output",
+      "display_name": "Primary evidence output",
+      "node_id": "comparison_manifest",
+      "port_id": "manifest",
+      "artifact_type": "manifest",
+      "required": true
+    }
+  ],
+  "multiple_start_policy": "allow",
+  "retry_policy": {
+    "maximum_attempts": 1,
+    "retry_deterministic_failures": true,
+    "retry_delay_seconds": 0
+  },
+  "cancellation_policy": {
+    "cooperative": true,
+    "preserve_completed_checkpoints": true,
+    "publish_partial_outputs": false
+  },
+  "resource_policy": {
+    "maximum_nodes": 250,
+    "maximum_edges": 1000,
+    "maximum_subflow_depth": 5,
+    "maximum_concurrent_ready_nodes": 4,
+    "maximum_payload_bytes": 2000000,
+    "maximum_parameter_bytes": 100000,
+    "maximum_run_history": 1000,
+    "checkpoint_retention_days": 30
+  },
+  "audit_policy": {
+    "record_parameters": true,
+    "exclude_sensitive_parameters": true,
+    "record_branch_decisions": true,
+    "record_node_metrics": true,
+    "record_artifact_fingerprints": true
+  },
+  "change_note": "Published anonymised template version 1",
+  "created_at": "2026-07-17T00:00:00Z",
+  "updated_at": "2026-07-17T00:00:00Z"
+}

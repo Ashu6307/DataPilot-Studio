@@ -70,9 +70,7 @@ def test_all_five_reconciliation_profiles_are_anonymised_and_valid() -> None:
         assert (root / "README.md").exists()
         assert (root / "left.csv").exists()
         assert (root / "right.csv").exists()
-        workflow = ReconciliationWorkflow.model_validate_json(
-            (root / "workflow.json").read_text(encoding="utf-8")
-        )
+        workflow = ReconciliationWorkflow.model_validate_json((root / "workflow.json").read_text(encoding="utf-8"))
         assert workflow.schema_version == "2b.1"
         assert isinstance(workflow.id, UUID)
         serialised = json.dumps(workflow.model_dump(mode="json")).casefold()

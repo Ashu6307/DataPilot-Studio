@@ -112,9 +112,7 @@ def test_reconciliation_runs_in_background_with_outputs_and_checkpoints(tmp_path
     right_path = service.workspace.source_from_id(right.id, right.original_filename, right.sha256).path
     before = (sha256_file(left_path), sha256_file(right_path))
     try:
-        job = executor.submit(
-            ReconciliationJobSubmission(run=ReconciliationRunRequest(workflow=workflow))
-        )
+        job = executor.submit(ReconciliationJobSubmission(run=ReconciliationRunRequest(workflow=workflow)))
         deadline = time.monotonic() + 10
         current = store.get(job.id)
         while current is not None and current.status not in {
@@ -146,9 +144,7 @@ def test_reconciliation_runs_in_background_with_outputs_and_checkpoints(tmp_path
         workbook_entry = next(entry for entry in manifest.entries if entry.relative_path.endswith(".xlsx"))
         stored_run = repository.get_run(current.run_id)
         assert stored_run is not None
-        workbook_path = next(
-            Path(path) for path in stored_run.artifacts if path.endswith(workbook_entry.relative_path)
-        )
+        workbook_path = next(Path(path) for path in stored_run.artifacts if path.endswith(workbook_entry.relative_path))
         workbook = load_workbook(workbook_path, read_only=True)
         assert "Reconciliation Summary" in workbook.sheetnames
         workbook.close()
@@ -183,9 +179,7 @@ def test_evidence_zip_is_deterministic_and_formula_safe(tmp_path: Path) -> None:
     first, second = tmp_path / "first", tmp_path / "second"
     export_reconciliation_evidence(first, result, workflow)
     export_reconciliation_evidence(second, result, workflow)
-    assert (first / "reconciliation_evidence.zip").read_bytes() == (
-        second / "reconciliation_evidence.zip"
-    ).read_bytes()
+    assert (first / "reconciliation_evidence.zip").read_bytes() == (second / "reconciliation_evidence.zip").read_bytes()
     difference_csv = first / "csv" / "Field Differences.csv"
     assert "'=1+1" in difference_csv.read_text(encoding="utf-8-sig")
     with difference_csv.open(encoding="utf-8-sig", newline="") as stream:
